@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Users | PhotoSync Admin{% endblock %}
+
+{% block content %}
+<h2>Users</h2>
+<p>
+    <a href="/admin/users/create">➕ Create User</a>
+</p>
+<table>
+    <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Actions</th>
+    </tr>
+
+    {% for user in users %}
+    <tr>
+        <td>{{ user.id }}</td>
+        <td>{{ user.username }}</td>
+        <td>{{ user.email }}</td>
+        <td class="status-{{ user.status }}">{{ user.status }}</td>
+        <td>{{ user.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td>
+            {% if user.status == "PENDING" %}
+                <form method="post" action="/admin/users/{{ user.id }}/approve" style="display:inline">
+                    <button>Approve</button>
+                </form>
+                <form method="post" action="/admin/users/{{ user.id }}/block" style="display:inline">
+                    <button>Block</button>
+                </form>
+            {% elif user.status == "ACTIVE" %}
+                {% if not user.is_admin or users|selectattr("is_admin")|selectattr("status","equalto","ACTIVE")|list|length > 1 %}
+                    <form method="post" action="/admin/users/{{ user.id }}/block" style="display:inline">
+                        <button>Block</button>
+                    </form>
+                {% else %}
+                    <span>Primary Admin</span>
+                {% endif %}
+            {% else %}
+                —
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

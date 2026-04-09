@@ -1,0 +1,12 @@
+pillow
+pydantic
+starlette
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-jose
+jinja2
+itsdangerous
+python-multipart
+passlib==1.7.4
+argon2-cffi
