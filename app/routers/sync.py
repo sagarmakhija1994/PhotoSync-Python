@@ -199,7 +199,7 @@ def get_photo_file(
     if thumbnail and photo.media_type == "photo":
         dir_name = os.path.dirname(original_path)
         filename = os.path.basename(original_path)
-        thumb_path = os.path.join(dir_name, "thumbnails", filename)
+        thumb_path = os.path.join(dir_name, ".thumbnails", filename)
         if os.path.exists(thumb_path):
             return FileResponse(thumb_path)
 
@@ -272,7 +272,7 @@ def upload_file(
 def generate_thumbnail(original_path: str):
     # 1. Create a hidden .thumbnails folder in the same directory
     dir_name = os.path.dirname(original_path)
-    thumb_dir = os.path.join(dir_name, "thumbnails")
+    thumb_dir = os.path.join(dir_name, ".thumbnails")
     os.makedirs(thumb_dir, exist_ok=True)
 
     # 2. Build the thumbnail path

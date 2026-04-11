@@ -38,7 +38,7 @@ def check_photo_exists(
     return PhotoCheckResponse(exists=exists)
 
 
-@router.post("/upload")
+@router.post("/upload_old")
 def upload_photo(
     file: UploadFile = File(...),
     sha256: str = Form(...),
