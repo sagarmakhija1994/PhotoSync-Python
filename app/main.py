@@ -8,6 +8,7 @@ from app.models import Base
 from app.routers import auth, admin, health, sync
 from app.routers import photos
 from app.routers import devices
+from app.routers import albums
 
 
 Base.metadata.create_all(bind=engine)
@@ -30,6 +31,7 @@ app.include_router(admin.router)
 app.include_router(photos.router)
 app.include_router(devices.router)
 app.include_router(sync.router)
+app.include_router(albums.router)
 
 @app.get("/")
 def read_root():

@@ -1,4 +1,7 @@
 # app/models.py
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
+from datetime import datetime
 
 from sqlalchemy import (
     Column,
@@ -88,3 +91,47 @@ class Photo(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "sha256", name="uq_user_photo_hash"),
     )
+
+# --- PHASE 3: ALBUMS & SHARING ---
+
+class Album(Base):
+    """Stores the Album metadata and who owns it."""
+    __tablename__ = "albums"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships to easily fetch connected data
+    owner = relationship("User")
+    photos = relationship("AlbumPhoto", back_populates="album", cascade="all, delete-orphan")
+    shared_with = relationship("SharedAccess", back_populates="album", cascade="all, delete-orphan")
+
+
+class AlbumPhoto(Base):
+    """A mapping table that links a Photo to an Album."""
+    __tablename__ = "album_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    album_id = Column(Integer, ForeignKey("albums.id"))
+    photo_id = Column(Integer, ForeignKey("photos.id"))
+    added_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    album = relationship("Album", back_populates="photos")
+    photo = relationship("Photo")
+
+
+class SharedAccess(Base):
+    """A mapping table that grants a specific User access to an Album."""
+    __tablename__ = "shared_access"
+
+    id = Column(Integer, primary_key=True, index=True)
+    album_id = Column(Integer, ForeignKey("albums.id"))
+    shared_with_user_id = Column(Integer, ForeignKey("users.id"))
+    granted_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    album = relationship("Album", back_populates="shared_with")
+    user = relationship("User") # The family member who gets to see the album
