@@ -1,6 +1,8 @@
 # app/routers/photos.py
+from typing import List
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.schemas.photos import PhotoCheckRequest, PhotoCheckResponse
@@ -21,6 +23,8 @@ from app.system_settings import get_setting
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
+class DeletePhotosRequest(BaseModel):
+    photo_ids: List[int]
 
 @router.post("/check", response_model=PhotoCheckResponse)
 def check_photo_exists(
@@ -112,3 +116,44 @@ def upload_photo(
     db.commit()
 
     return {"status": "uploaded"}
+
+
+# --- 6. DELETE BATCH ENDPOINT ---
+@router.post("/delete-batch")
+def delete_photos_batch(
+        request: DeletePhotosRequest,
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    storage_root = get_setting(db, "STORAGE_ROOT")
+
+    # 1. Fetch only the photos that belong to THIS user
+    photos_to_delete = db.query(Photo).filter(
+        Photo.user_id == user.id,
+        Photo.id.in_(request.photo_ids)
+    ).all()
+
+    deleted_count = 0
+
+    for photo in photos_to_delete:
+        device = db.query(Device).filter(Device.id == photo.device_id).first()
+
+        # Calculate paths
+        original_path = safe_join(storage_root, "users", user.username, device.device_name, photo.relative_path)
+        dir_name = os.path.dirname(original_path)
+        thumb_path = safe_join(dir_name, ".thumbnails", os.path.basename(original_path))
+
+        # 2. Delete physical files (ignore errors if they are already missing)
+        try:
+            if os.path.exists(original_path): os.remove(original_path)
+            if os.path.exists(thumb_path): os.remove(thumb_path)
+        except Exception as e:
+            print(f"File deletion error for {photo.id}: {e}")
+
+        # 3. Delete from DB
+        db.delete(photo)
+        deleted_count += 1
+
+    db.commit()
+    print(f"✅ DELETED {deleted_count} photos from server.")
+    return {"status": "success", "deleted": deleted_count}
