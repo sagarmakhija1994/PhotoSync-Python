@@ -58,11 +58,16 @@ def get_albums(user: User = Depends(get_current_user), db: Session = Depends(get
     # Find albums shared with this user
     shared_accesses = db.query(SharedAccess).filter(SharedAccess.shared_with_user_id == user.id).all()
     shared_album_ids = [access.album_id for access in shared_accesses]
-    shared_albums = db.query(Album).filter(Album.id.in_(shared_album_ids)).all()
+
+    # NEW: Join with User to grab the username
+    shared_albums = db.query(Album, User).join(User, Album.owner_id == User.id) \
+        .filter(Album.id.in_(shared_album_ids)).all()
 
     return {
         "owned": [{"id": a.id, "name": a.name} for a in owned_albums],
-        "shared_with_me": [{"id": a.id, "name": a.name, "owner_id": a.owner_id} for a in shared_albums]
+        "shared_with_me": [
+            {"id": a.Album.id, "name": a.Album.name, "owner_id": a.Album.owner_id, "owner_username": a.User.username}
+            for a in shared_albums]
     }
 
 

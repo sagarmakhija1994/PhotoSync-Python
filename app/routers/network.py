@@ -53,7 +53,8 @@ def get_pending_requests(user: User = Depends(get_current_user), db: Session = D
     pending = db.query(FollowRequest, User).join(User, FollowRequest.follower_id == User.id) \
         .filter(FollowRequest.target_id == user.id, FollowRequest.status == "PENDING").all()
 
-    return [{"request_id": r.FollowRequest.id, "user_id": u.User.id, "username": u.User.username} for r, u in pending]
+    # FIX: r and u are already the raw objects, no need to call .FollowRequest or .User
+    return [{"request_id": r.id, "user_id": u.id, "username": u.username} for r, u in pending]
 
 
 # --- 3. ACCEPT / REJECT REQUEST ---
@@ -81,8 +82,17 @@ def resolve_request(request_id: int, action: str, user: User = Depends(get_curre
 # --- 4. GET MY APPROVED NETWORK (People I can share with) ---
 @router.get("/connections")
 def get_approved_connections(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns users that the current user is following AND have accepted the request."""
-    following = db.query(FollowRequest, User).join(User, FollowRequest.target_id == User.id) \
+    """Returns users that the current user is following OR who are following the current user."""
+
+    # 1. People I sent a request to (who accepted)
+    following = db.query(User).join(FollowRequest, FollowRequest.target_id == User.id) \
         .filter(FollowRequest.follower_id == user.id, FollowRequest.status == "ACCEPTED").all()
 
-    return [{"user_id": u.User.id, "username": u.User.username} for r, u in following]
+    # 2. People who sent a request to me (that I accepted)
+    followers = db.query(User).join(FollowRequest, FollowRequest.follower_id == User.id) \
+        .filter(FollowRequest.target_id == user.id, FollowRequest.status == "ACCEPTED").all()
+
+    # Combine both lists and remove any duplicates automatically using a dictionary
+    unique_connections = {u.id: u.username for u in (following + followers)}
+
+    return [{"user_id": uid, "username": uname} for uid, uname in unique_connections.items()]

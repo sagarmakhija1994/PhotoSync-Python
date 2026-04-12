@@ -33,12 +33,14 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     approved_at = Column(DateTime, nullable=True)
 
+    # NEW: Used to instantly log out all devices
+    session_version = Column(Integer, default=1, nullable=False)
+
     devices = relationship(
         "Device",
         back_populates="user",
         cascade="all, delete-orphan",
     )
-
 
 
 class Device(Base):

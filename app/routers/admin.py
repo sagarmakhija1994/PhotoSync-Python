@@ -1,11 +1,10 @@
-# app/routers/admin.py
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.database import SessionLocal
+from app.deps import get_current_user, get_db
 from app.models import User
 from app.security import verify_password
 from app.templates_engine import templates
@@ -18,9 +17,6 @@ from pydantic import BaseModel
 
 import os
 from app.system_settings import set_setting
-
-
-
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -269,16 +265,33 @@ def create_user(
     return RedirectResponse("/admin/users", status_code=303)
 
 
-@router.post("/admin/users/{user_id}/reset-password")
-def admin_reset_password(user_id: int, request: AdminPasswordReset, current_user: User = Depends(get_current_user),
-                         db: Session = Depends(get_db)):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Only admins can reset passwords.")
-
+@router.post("/users/{user_id}/reset-password")
+def admin_reset_password(
+    user_id: int,
+    request: AdminPasswordReset,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
     target_user = db.query(User).filter(User.id == user_id).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    target_user.password_hash = get_password_hash(request.new_password)
+    target_user.password_hash = hash_password(request.new_password)
     db.commit()
     return {"status": "success", "message": f"Password for {target_user.username} has been reset."}
+
+
+@router.post("/users/{user_id}/force-logout")
+def force_logout_user(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Increment the version to instantly invalidate old tokens
+    target_user.session_version += 1
+    db.commit()
+    return {"status": "success", "message": f"{target_user.username} has been logged out of all devices."}
