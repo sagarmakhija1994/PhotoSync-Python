@@ -9,6 +9,7 @@ from app.routers import auth, admin, health, sync
 from app.routers import photos
 from app.routers import devices
 from app.routers import albums
+from app.routers import network
 
 
 Base.metadata.create_all(bind=engine)
@@ -32,6 +33,7 @@ app.include_router(photos.router)
 app.include_router(devices.router)
 app.include_router(sync.router)
 app.include_router(albums.router)
+app.include_router(network.router)
 
 @app.get("/")
 def read_root():

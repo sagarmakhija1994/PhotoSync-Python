@@ -20,6 +20,14 @@ class AlbumCreate(BaseModel):
     name: str
 
 
+class RemovePhotosRequest(BaseModel):
+    photo_ids: List[int]
+
+
+class RenameAlbumRequest(BaseModel):
+    name: str
+
+
 class AddPhotosRequest(BaseModel):
     photo_ids: List[int]
 
@@ -135,7 +143,7 @@ def import_shared_photo(request: ImportPhotoRequest, user: User = Depends(get_cu
     filename = os.path.basename(orig_path)
     new_relative_path = filename
     new_dir = safe_join(storage_root, "users", user.username, "Imported")
-    new_thumb_dir = safe_join(new_dir, "thumbnails")
+    new_thumb_dir = safe_join(new_dir, ".thumbnails")
     os.makedirs(new_thumb_dir, exist_ok=True)
 
     new_path = safe_join(new_dir, filename)
@@ -146,20 +154,22 @@ def import_shared_photo(request: ImportPhotoRequest, user: User = Depends(get_cu
         shutil.copy2(orig_path, new_path)
 
     # Copy thumbnail if it exists
-    orig_thumb_path = safe_join(os.path.dirname(orig_path), "thumbnails", filename)
+    orig_thumb_path = safe_join(os.path.dirname(orig_path), ".thumbnails", filename)
     if os.path.exists(orig_thumb_path) and not os.path.exists(new_thumb_path):
         shutil.copy2(orig_thumb_path, new_thumb_path)
 
-    # 5. Database Entry
+    # 5. Database Entry (FIXED: sha256 and media_type)
     existing_copy = db.query(Photo).filter(Photo.user_id == user.id,
-                                           Photo.file_hash == original_photo.file_hash).first()
+                                           Photo.sha256 == original_photo.sha256).first()
     if not existing_copy:
         new_photo = Photo(
             user_id=user.id,
             device_id=imported_device.id,
             relative_path=new_relative_path,
-            file_hash=original_photo.file_hash,
-            file_size=original_photo.file_size
+            sha256=original_photo.sha256,
+            file_size=original_photo.file_size,
+            media_type=original_photo.media_type,
+            created_at=original_photo.created_at
         )
         db.add(new_photo)
         db.commit()
@@ -240,8 +250,6 @@ def import_entire_album(album_id: int, user: User = Depends(get_current_user), d
 
     imported_count = 0
     for ap in album_photos:
-        # Reuse your existing import logic for each photo
-        # This physically copies the file and creates a new Photo entry for 'user'
         try:
             # We call the logic manually here
             import_req = ImportPhotoRequest(photo_id=ap.photo_id)
@@ -256,3 +264,113 @@ def import_entire_album(album_id: int, user: User = Depends(get_current_user), d
 
     db.commit()
     return {"status": "success", "new_album_id": new_local_album.id, "imported_photos": imported_count}
+
+
+# --- 8. RENAME ALBUM ---
+@router.put("/{album_id}/rename")
+def rename_album(album_id: int, request: RenameAlbumRequest, user: User = Depends(get_current_user),
+                 db: Session = Depends(get_db)):
+    album = db.query(Album).filter(Album.id == album_id, Album.owner_id == user.id).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found or you don't own it.")
+
+    album.name = request.name
+    db.commit()
+    return {"status": "success", "new_name": album.name}
+
+
+# --- 9. DELETE ALBUM ---
+@router.delete("/{album_id}")
+def delete_album(
+        album_id: int,
+        delete_files: bool = Query(False),
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    album = db.query(Album).filter(Album.id == album_id, Album.owner_id == user.id).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found or you don't own it.")
+
+    # If the user wants to permanently delete the physical files inside this album
+    if delete_files:
+        storage_root = get_setting(db, "STORAGE_ROOT")
+        album_photos = db.query(AlbumPhoto).filter(AlbumPhoto.album_id == album_id).all()
+
+        for ap in album_photos:
+            photo = db.query(Photo).filter(Photo.id == ap.photo_id, Photo.user_id == user.id).first()
+            if photo:
+                device = db.query(Device).filter(Device.id == photo.device_id).first()
+                # Delete physical files
+                original_path = safe_join(storage_root, "users", user.username, device.device_name, photo.relative_path)
+                dir_name = os.path.dirname(original_path)
+                thumb_path_1 = safe_join(dir_name, ".thumbnails", os.path.basename(original_path))
+                thumb_path_2 = safe_join(dir_name, ".thumbnails", os.path.basename(original_path))
+
+                try:
+                    if os.path.exists(original_path): os.remove(original_path)
+                    if os.path.exists(thumb_path_1): os.remove(thumb_path_1)
+                    if os.path.exists(thumb_path_2): os.remove(thumb_path_2)
+                except Exception as e:
+                    print(f"Failed to delete file {photo.id}: {e}")
+
+                # Delete from Photo table
+                db.delete(photo)
+
+    db.query(SharedAccess).filter(SharedAccess.album_id == album_id).delete()
+    db.query(AlbumPhoto).filter(AlbumPhoto.album_id == album_id).delete()
+    db.delete(album)
+    db.commit()
+
+    return {"status": "success", "message": "Album deleted."}
+
+
+# --- 10. GET ALBUM SHARE STATUS ---
+@router.get("/{album_id}/shares")
+def get_album_shares(album_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Returns a list of users this album is currently shared with."""
+    album = db.query(Album).filter(Album.id == album_id, Album.owner_id == user.id).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found or you don't own it.")
+
+    shares = db.query(SharedAccess, User).join(User, SharedAccess.shared_with_user_id == User.id) \
+        .filter(SharedAccess.album_id == album_id).all()
+
+    return [{"id": u.User.id, "username": u.User.username} for u in shares]
+
+
+# --- 11. UNSHARE ALBUM WITH SPECIFIC USER ---
+@router.delete("/{album_id}/share/{target_user_id}")
+def unshare_album(album_id: int, target_user_id: int, user: User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    album = db.query(Album).filter(Album.id == album_id, Album.owner_id == user.id).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found or you don't own it.")
+
+    deleted = db.query(SharedAccess).filter(
+        SharedAccess.album_id == album_id,
+        SharedAccess.shared_with_user_id == target_user_id
+    ).delete()
+
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Share record not found.")
+
+    db.commit()
+    return {"status": "success", "message": "User access removed."}
+
+
+# --- 12. REMOVE PHOTOS FROM ALBUM (UNLINK) ---
+@router.post("/{album_id}/remove-photos")
+def remove_photos(album_id: int, request: RemovePhotosRequest, user: User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    """Unlinks photos from an album without deleting the physical files from the server."""
+    album = db.query(Album).filter(Album.id == album_id, Album.owner_id == user.id).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found or you don't own it.")
+
+    deleted_count = db.query(AlbumPhoto).filter(
+        AlbumPhoto.album_id == album_id,
+        AlbumPhoto.photo_id.in_(request.photo_ids)
+    ).delete(synchronize_session=False)
+
+    db.commit()
+    return {"status": "success", "message": f"Removed {deleted_count} photos from album."}

@@ -200,7 +200,7 @@ def get_photo_file(
         dir_name = os.path.dirname(original_path)
         # Checking for both '.thumbnails' (used in your delete endpoint) and 'thumbnails' (used in albums)
         thumb_path_dot = safe_join(dir_name, ".thumbnails", os.path.basename(original_path))
-        thumb_path_no_dot = safe_join(dir_name, "thumbnails", os.path.basename(original_path))
+        thumb_path_no_dot = safe_join(dir_name, ".thumbnails", os.path.basename(original_path))
 
         if os.path.exists(thumb_path_dot):
             target_path = thumb_path_dot

@@ -135,3 +135,17 @@ class SharedAccess(Base):
     # Relationships
     album = relationship("Album", back_populates="shared_with")
     user = relationship("User") # The family member who gets to see the album
+
+
+class FollowRequest(Base):
+    __tablename__ = "follow_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    follower_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    target_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), default="PENDING") # Can be PENDING, ACCEPTED, REJECTED
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    follower = relationship("User", foreign_keys=[follower_id])
+    target = relationship("User", foreign_keys=[target_id])

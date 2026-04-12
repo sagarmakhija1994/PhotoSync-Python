@@ -14,6 +14,7 @@ from app.admin_auth import require_admin
 from app.bootstrap import is_bootstrap_allowed
 from app.security import hash_password
 from fastapi import Form
+from pydantic import BaseModel
 
 import os
 from app.system_settings import set_setting
@@ -39,6 +40,9 @@ def active_admin_count(db: Session) -> int:
         .count()
     )
 
+
+class AdminPasswordReset(BaseModel):
+    new_password: str
 
 # ---------- LOGIN ----------
 
@@ -263,3 +267,18 @@ def create_user(
     db.commit()
 
     return RedirectResponse("/admin/users", status_code=303)
+
+
+@router.post("/admin/users/{user_id}/reset-password")
+def admin_reset_password(user_id: int, request: AdminPasswordReset, current_user: User = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can reset passwords.")
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    target_user.password_hash = get_password_hash(request.new_password)
+    db.commit()
+    return {"status": "success", "message": f"Password for {target_user.username} has been reset."}
