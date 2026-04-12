@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Initial Admin Setup{% endblock %}
+
+{% block content %}
+<h2>Initial Admin Setup</h2>
+
+<p>This is a one-time setup. The first user will become the administrator.</p>
+
+<form method="post">
+    <label>Username</label><br>
+    <input name="username" required><br><br>
+
+    <label>Email</label><br>
+    <input type="email" name="email" required><br><br>
+
+    <label>Password</label><br>
+    <input type="password" name="password" required><br><br>
+
+    <label>Storage Path (absolute)</label><br>
+    <input name="storage_path" placeholder="E:/photosync-data" required style="width:400px"><br><br>
+
+    <small>
+    Path must already exist and be writable.<br>
+    Example: <code>D:/PhotoStorage</code> or <code>/mnt/photos</code>
+    </small><br><br>
+
+
+    <button type="submit">Create Admin</button>
+</form>
+
+{% if error %}
+<p style="color:red">{{ error }}</p>
+{% endif %}
+{% endblock %}

@@ -1,3 +1,4 @@
+pystray
 pillow
 pydantic
 starlette
