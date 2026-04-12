@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
+from fastapi import Query
 
 # --- EXACT IMPORTS BASED ON YOUR ARCHITECTURE ---
 from app.deps import get_db, get_current_user
@@ -168,6 +169,24 @@ def import_shared_photo(request: ImportPhotoRequest, user: User = Depends(get_cu
     return {"status": "already_imported", "photo_id": existing_copy.id}
 
 
+# --- SEARCH USERS (INSTAGRAM STYLE) ---
+@router.get("/available-users")
+def search_users(q: str = Query(""), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Searches for active users by username. Requires at least 3 characters."""
+    if len(q) < 3:
+        return []  # Return empty if they haven't typed enough
+
+    # Search for usernames that contain the query string (case-insensitive)
+    search_query = f"%{q}%"
+    other_users = db.query(User).filter(
+        User.id != user.id,
+        User.status == "ACTIVE",
+        User.username.ilike(search_query)
+    ).limit(20).all()  # Safety limit so we don't send 1,000 rows
+
+    return [{"id": u.id, "username": u.username} for u in other_users]
+
+
 # --- 6. GET ALBUM DETAILS & PHOTOS ---
 @router.get("/{album_id}")
 def get_album_details(album_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -194,3 +213,46 @@ def get_album_details(album_id: int, user: User = Depends(get_current_user), db:
     ]
 
     return {"id": album.id, "name": album.name, "owner_id": album.owner_id, "photos": photo_list}
+
+
+# --- 7. CLONE ENTIRE SHARED ALBUM ---
+@router.post("/{album_id}/import-all")
+def import_entire_album(album_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Physically copies all photos from a shared album and creates a local version of the album."""
+    shared_album = db.query(Album).filter(Album.id == album_id).first()
+    if not shared_album:
+        raise HTTPException(status_code=404, detail="Album not found.")
+
+    # 1. Security check
+    access = db.query(SharedAccess).filter(SharedAccess.album_id == album_id,
+                                           SharedAccess.shared_with_user_id == user.id).first()
+    if not access and shared_album.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    # 2. Create a new local album for the importing user
+    new_local_album = Album(name=f"Imported: {shared_album.name}", owner_id=user.id)
+    db.add(new_local_album)
+    db.commit()
+    db.refresh(new_local_album)
+
+    # 3. Get all photos from the original album
+    album_photos = db.query(AlbumPhoto).filter(AlbumPhoto.album_id == album_id).all()
+
+    imported_count = 0
+    for ap in album_photos:
+        # Reuse your existing import logic for each photo
+        # This physically copies the file and creates a new Photo entry for 'user'
+        try:
+            # We call the logic manually here
+            import_req = ImportPhotoRequest(photo_id=ap.photo_id)
+            result = import_shared_photo(import_req, user, db)
+
+            # Link the newly created photo (or existing copy) to the new album
+            new_photo_id = result.get("new_photo_id") or result.get("photo_id")
+            db.add(AlbumPhoto(album_id=new_local_album.id, photo_id=new_photo_id))
+            imported_count += 1
+        except Exception as e:
+            print(f"Failed to import photo {ap.photo_id}: {e}")
+
+    db.commit()
+    return {"status": "success", "new_album_id": new_local_album.id, "imported_photos": imported_count}

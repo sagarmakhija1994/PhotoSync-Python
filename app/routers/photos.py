@@ -10,6 +10,8 @@ from app.services.photos import photo_exists
 from app.deps import get_current_user, get_db
 from app.deps_device import get_current_device
 from app.models import User, Device
+from fastapi.responses import FileResponse
+from app.models import SharedAccess, AlbumPhoto # Add these two models!
 
 from fastapi import UploadFile, File, Form, HTTPException
 import os
@@ -157,3 +159,56 @@ def delete_photos_batch(
     db.commit()
     print(f"✅ DELETED {deleted_count} photos from server.")
     return {"status": "success", "deleted": deleted_count}
+
+# --- SERVE PHOTO / THUMBNAIL (WITH SHARED ACCESS LOGIC) ---
+@router.get("/file/{photo_id}")
+def get_photo_file(
+    photo_id: int,
+    thumbnail: bool = False,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    photo = db.query(Photo).filter(Photo.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    # --- THE MAGIC SECURITY UPGRADE ---
+    # If the user requesting the file is NOT the owner...
+    if photo.user_id != user.id:
+        # Check if this specific photo is inside an album shared with this specific user
+        shared = db.query(AlbumPhoto).join(
+            SharedAccess, AlbumPhoto.album_id == SharedAccess.album_id
+        ).filter(
+            AlbumPhoto.photo_id == photo_id,
+            SharedAccess.shared_with_user_id == user.id
+        ).first()
+
+        if not shared:
+            # We return 404 instead of 403 so we don't even leak the fact that the photo exists!
+            raise HTTPException(status_code=404, detail="Photo not found or access denied")
+
+    # --- PATH CALCULATION ---
+    storage_root = get_setting(db, "STORAGE_ROOT")
+    device = db.query(Device).filter(Device.id == photo.device_id).first()
+    owner = db.query(User).filter(User.id == photo.user_id).first()
+
+    original_path = safe_join(storage_root, "users", owner.username, device.device_name, photo.relative_path)
+    target_path = original_path
+
+    # --- THUMBNAIL HANDLING ---
+    if thumbnail:
+        dir_name = os.path.dirname(original_path)
+        # Checking for both '.thumbnails' (used in your delete endpoint) and 'thumbnails' (used in albums)
+        thumb_path_dot = safe_join(dir_name, ".thumbnails", os.path.basename(original_path))
+        thumb_path_no_dot = safe_join(dir_name, "thumbnails", os.path.basename(original_path))
+
+        if os.path.exists(thumb_path_dot):
+            target_path = thumb_path_dot
+        elif os.path.exists(thumb_path_no_dot):
+            target_path = thumb_path_no_dot
+        # If no thumbnail is found, it automatically falls back to serving the full original_path
+
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail="Physical file missing from server")
+
+    return FileResponse(target_path)
