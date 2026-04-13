@@ -3,14 +3,14 @@ import os
 import json
 import threading
 import webbrowser
-import uvicorn
-import pystray
-from PIL import Image, ImageDraw
 import tkinter as tk
 from tkinter import simpledialog, messagebox
-from app.main import app  # Imports your FastAPI app
 
-# ---- Setup Safe AppData Paths ----
+# ---- 1. CREATE FOLDERS BEFORE ANYTHING ELSE ----
+# Create a local data folder (in case your database.py uses a relative path)
+os.makedirs("data", exist_ok=True)
+
+# Create the AppData folders (for config and logs)
 app_data_path = os.path.join(os.getenv('APPDATA'), 'PhotoSync')
 os.makedirs(app_data_path, exist_ok=True)
 os.makedirs(os.path.join(app_data_path, "data"), exist_ok=True)
@@ -20,6 +20,12 @@ log_file_path = os.path.join(app_data_path, "photosync_server.log")
 log_file = open(log_file_path, "w", encoding="utf-8")
 sys.stdout = log_file
 sys.stderr = log_file
+
+# ---- 3. NOW WE IMPORT FASTAPI ----
+import uvicorn
+import pystray
+from PIL import Image, ImageDraw
+from app.main import app  # <--- Moved here! Safe to import now.
 
 # ---- Port Configuration Logic ----
 config_path = os.path.join(app_data_path, "config.json")
