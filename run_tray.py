@@ -1,56 +1,121 @@
 import sys
 import os
-
-log_file = open("photosync_server.log", "w", encoding="utf-8")
-sys.stdout = log_file
-sys.stderr = log_file
-os.makedirs("data", exist_ok=True)
-
-
+import json
 import threading
 import webbrowser
 import uvicorn
 import pystray
 from PIL import Image, ImageDraw
+import tkinter as tk
+from tkinter import simpledialog, messagebox
 from app.main import app  # Imports your FastAPI app
 
-# Global reference to the server so we can stop it
+# ---- Setup Safe AppData Paths ----
+app_data_path = os.path.join(os.getenv('APPDATA'), 'PhotoSync')
+os.makedirs(app_data_path, exist_ok=True)
+os.makedirs(os.path.join(app_data_path, "data"), exist_ok=True)
+
+# ---- Redirect Logs ----
+log_file_path = os.path.join(app_data_path, "photosync_server.log")
+log_file = open(log_file_path, "w", encoding="utf-8")
+sys.stdout = log_file
+sys.stderr = log_file
+
+# ---- Port Configuration Logic ----
+config_path = os.path.join(app_data_path, "config.json")
+CURRENT_PORT = 8000
+
+
+def prompt_for_port(initial_port=8000, title="PhotoSync Setup"):
+    # Create a tiny, hidden UI window to spawn the input box
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)  # Force popup to the front of the screen
+
+    user_port = simpledialog.askinteger(
+        title,
+        "Enter a port number for your PhotoSync server (e.g., 8000, 8080):",
+        initialvalue=initial_port,
+        minvalue=1024,
+        maxvalue=65535
+    )
+    root.destroy()
+    return user_port if user_port else initial_port
+
+
+def load_or_init_config():
+    # If config exists, read it. If not, prompt the user and save it.
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            config = json.load(f)
+            return config.get("port", 8000)
+    else:
+        new_port = prompt_for_port()
+        with open(config_path, "w") as f:
+            json.dump({"port": new_port}, f)
+        return new_port
+
+
+# Load the port before starting anything
+CURRENT_PORT = load_or_init_config()
+
+# Global reference to the server
 server = None
 
+
 def create_image():
-    # Generates a simple icon (You can load a real .ico file here instead!)
-    image = Image.new('RGB', (64, 64), color = (33, 150, 243))
+    image = Image.new('RGB', (64, 64), color=(33, 150, 243))
     dc = ImageDraw.Draw(image)
     dc.rectangle((16, 16, 48, 48), fill=(255, 255, 255))
     return image
 
+
 def start_server():
     global server
-    # Lowered log_level to warning so the text file doesn't get massive over time
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
+    # Use the dynamic CURRENT_PORT here!
+    config = uvicorn.Config(app, host="0.0.0.0", port=CURRENT_PORT, log_level="warning")
     server = uvicorn.Server(config)
     server.run()
 
+
 def on_open_dashboard(icon, item):
-    webbrowser.open("http://127.0.0.1:8000/admin")
+    # Dynamically inject the port into the URL
+    webbrowser.open(f"http://127.0.0.1:{CURRENT_PORT}/admin")
+
+
+def on_change_port(icon, item):
+    global CURRENT_PORT
+    new_port = prompt_for_port(initial_port=CURRENT_PORT, title="Change PhotoSync Port")
+
+    if new_port != CURRENT_PORT:
+        with open(config_path, "w") as f:
+            json.dump({"port": new_port}, f)
+
+        # Show a quick alert telling them to restart
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        messagebox.showinfo("Restart Required",
+                            f"Port saved as {new_port}!\n\nPlease right-click the tray icon, click 'Exit', and restart PhotoSync to apply changes.")
+        root.destroy()
+
 
 def on_exit(icon, item):
     global server
     if server:
-        server.should_exit = True # Gracefully shuts down FastAPI
+        server.should_exit = True
     icon.stop()
 
+
 if __name__ == "__main__":
-    # 1. Start the FastAPI server in a background thread
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
 
-    # 2. Build the System Tray Menu
     menu = pystray.Menu(
         pystray.MenuItem("Open Dashboard", on_open_dashboard, default=True),
+        pystray.MenuItem("Change Port...", on_change_port),  # <--- New Menu Item!
         pystray.MenuItem("Exit PhotoSync", on_exit)
     )
 
-    # 3. Start the System Tray Icon (This blocks the main thread)
     icon = pystray.Icon("PhotoSync", create_image(), "PhotoSync Server", menu)
     icon.run()
