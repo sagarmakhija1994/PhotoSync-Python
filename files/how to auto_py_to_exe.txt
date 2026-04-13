@@ -1,0 +1,9 @@
+open auto-py-to-exe
+import json config file from "files" folder.
+go to "advance" and check "--hidden-import"
+make sure there are two "--hidden-impor" added as follow:
+1) passlib.handlers.bcrypt
+2) passlib.handlers.argon2
+
+
+lot of time, while reading the json config it misses the one of the hidden import.

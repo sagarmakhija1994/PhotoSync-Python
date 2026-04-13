@@ -56,6 +56,10 @@
   {
    "optionDest": "hiddenimports",
    "value": "passlib.handlers.bcrypt"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "passlib.handlers.argon2"
   }
  ],
  "nonPyinstallerOptions": {
