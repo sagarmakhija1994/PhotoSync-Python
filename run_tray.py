@@ -6,37 +6,36 @@ import webbrowser
 import tkinter as tk
 from tkinter import simpledialog, messagebox
 
-# ---- 1. CREATE FOLDERS BEFORE ANYTHING ELSE ----
-# Create a local data folder (in case your database.py uses a relative path)
-os.makedirs("data", exist_ok=True)
+# ---- 1. CHECK BOOT STATE FIRST ----
+# We need to know immediately if we are in the invisible Session 0
+IS_BACKGROUND = "--background" in sys.argv
 
-# Create the AppData folders (for config and logs)
+# ---- 2. CREATE FOLDERS BEFORE ANYTHING ELSE ----
+os.makedirs("data", exist_ok=True)
 app_data_path = os.path.join(os.getenv('APPDATA'), 'PhotoSync')
 os.makedirs(app_data_path, exist_ok=True)
 os.makedirs(os.path.join(app_data_path, "data"), exist_ok=True)
 
-# ---- Redirect Logs ----
+# ---- 3. REDIRECT LOGS ----
 log_file_path = os.path.join(app_data_path, "photosync_server.log")
 log_file = open(log_file_path, "w", encoding="utf-8")
 sys.stdout = log_file
 sys.stderr = log_file
 
-# ---- 3. NOW WE IMPORT FASTAPI ----
+# ---- 4. NOW WE IMPORT FASTAPI ----
 import uvicorn
 import pystray
 from PIL import Image, ImageDraw
-from app.main import app  # <--- Moved here! Safe to import now.
+from app.main import app
 
-# ---- Port Configuration Logic ----
+# ---- 5. SAFE CONFIGURATION LOGIC ----
 config_path = os.path.join(app_data_path, "config.json")
-CURRENT_PORT = 8000
 
 
 def prompt_for_port(initial_port=8000, title="PhotoSync Setup"):
-    # Create a tiny, hidden UI window to spawn the input box
     root = tk.Tk()
     root.withdraw()
-    root.attributes('-topmost', True)  # Force popup to the front of the screen
+    root.attributes('-topmost', True)
 
     user_port = simpledialog.askinteger(
         title,
@@ -50,22 +49,26 @@ def prompt_for_port(initial_port=8000, title="PhotoSync Setup"):
 
 
 def load_or_init_config():
-    # If config exists, read it. If not, prompt the user and save it.
     if os.path.exists(config_path):
         with open(config_path, "r") as f:
             config = json.load(f)
             return config.get("port", 8000)
     else:
+        # CRITICAL SAFEGUARD:
+        # If config doesn't exist and we are in Session 0, DO NOT open the popup.
+        if IS_BACKGROUND:
+            return None
+
+            # Otherwise, the user clicked it normally. Ask them for the port!
         new_port = prompt_for_port()
         with open(config_path, "w") as f:
             json.dump({"port": new_port}, f)
         return new_port
 
 
-# Load the port before starting anything
+# Load the port (Will be None if background boot + no config)
 CURRENT_PORT = load_or_init_config()
 
-# Global reference to the server
 server = None
 
 
@@ -78,14 +81,12 @@ def create_image():
 
 def start_server():
     global server
-    # Use the dynamic CURRENT_PORT here!
     config = uvicorn.Config(app, host="0.0.0.0", port=CURRENT_PORT, log_level="warning")
     server = uvicorn.Server(config)
     server.run()
 
 
 def on_open_dashboard(icon, item):
-    # Dynamically inject the port into the URL
     webbrowser.open(f"http://127.0.0.1:{CURRENT_PORT}/admin")
 
 
@@ -97,7 +98,6 @@ def on_change_port(icon, item):
         with open(config_path, "w") as f:
             json.dump({"port": new_port}, f)
 
-        # Show a quick alert telling them to restart
         root = tk.Tk()
         root.withdraw()
         root.attributes('-topmost', True)
@@ -113,15 +113,30 @@ def on_exit(icon, item):
     icon.stop()
 
 
+# ---- 6. EXECUTION LOGIC ----
 if __name__ == "__main__":
-    server_thread = threading.Thread(target=start_server, daemon=True)
-    server_thread.start()
+    if IS_BACKGROUND:
+        if CURRENT_PORT is None:
+            # We are on the lock screen, but the user hasn't set a port yet.
+            # Exit silently. The app will run normally when they launch from Start Menu.
+            sys.exit(0)
+        else:
+            # We have a port, and we are in the background. Run server without UI!
+            start_server()
+    else:
+        # User launched app manually. Give them the full tray UI.
+        if CURRENT_PORT is not None:
+            server_thread = threading.Thread(target=start_server, daemon=True)
+            server_thread.start()
 
-    menu = pystray.Menu(
-        pystray.MenuItem("Open Dashboard", on_open_dashboard, default=True),
-        pystray.MenuItem("Change Port...", on_change_port),  # <--- New Menu Item!
-        pystray.MenuItem("Exit PhotoSync", on_exit)
-    )
+            menu = pystray.Menu(
+                pystray.MenuItem("Open Dashboard", on_open_dashboard, default=True),
+                pystray.MenuItem("Change Port...", on_change_port),
+                pystray.MenuItem("Exit PhotoSync", on_exit)
+            )
 
-    icon = pystray.Icon("PhotoSync", create_image(), "PhotoSync Server", menu)
-    icon.run()
+            icon = pystray.Icon("PhotoSync", create_image(), "PhotoSync Server", menu)
+            icon.run()
+        else:
+            # Failsafe in case they hit cancel on the port popup
+            sys.exit(0)

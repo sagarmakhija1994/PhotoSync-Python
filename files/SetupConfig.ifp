@@ -40,7 +40,7 @@
     <Languages/>
     <Variables/>
     <Commands>
-      <Command type="Execute Application" command="schtasks /create /tn &quot;PhotoSync_Background&quot; /tr &quot;\&quot;&lt;installpath&gt;\run_tray.exe\&quot;&quot; /sc onlogon /rl highest /f" commandLineArguments="" options="-wait -hide"/>
+      <Command type="Execute Application" command="cmd.exe" commandLineArguments="/c schtasks /create /tn &quot;PhotoSync_Background&quot; /tr &quot;\&quot;&lt;InstallPath&gt;\PhotoSync.exe\&quot; --background&quot; /sc onstart /ru &quot;SYSTEM&quot; /rl highest /f" options="-wait -hide"/>
     </Commands>
     <Registry/>
     <Shortcuts defaultPath="&lt;Company&gt;\&lt;AppName&gt;\" isDefaultPathAlterable="false" isCreateStartmenuShortcutsForAllUsers="true" isCreateDesktopShortcutsForAllUsers="true">
