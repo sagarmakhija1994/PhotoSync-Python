@@ -39,7 +39,9 @@
     </InstallationFiles>
     <Languages/>
     <Variables/>
-    <Commands/>
+    <Commands>
+      <Command type="Execute Application" command="schtasks /create /tn &quot;PhotoSync_Background&quot; /tr &quot;\&quot;&lt;installpath&gt;\run_tray.exe\&quot;&quot; /sc onlogon /rl highest /f" commandLineArguments="" options="-wait -hide"/>
+    </Commands>
     <Registry/>
     <Shortcuts defaultPath="&lt;Company&gt;\&lt;AppName&gt;\" isDefaultPathAlterable="false" isCreateStartmenuShortcutsForAllUsers="true" isCreateDesktopShortcutsForAllUsers="true">
       <Shortcut destination="Desktop" name="PhotoSync" targetFile="&lt;InstallPath&gt;\PhotoSync.exe" commandLineArguments="" iconFilePath="" iconIndex="0"/>
