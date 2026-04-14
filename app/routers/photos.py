@@ -59,7 +59,7 @@ def upload_photo(
     if exists:
         return {"status": "skipped"}
 
-    storage_root = get_setting(db, "STORAGE_ROOT")
+    storage_root = os.environ.get("PHOTOSYNC_STORAGE") or get_setting(db, "STORAGE_ROOT")
     if not storage_root:
         raise HTTPException(500, "Storage root not configured")
 
@@ -127,7 +127,7 @@ def delete_photos_batch(
         user: User = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
-    storage_root = get_setting(db, "STORAGE_ROOT")
+    storage_root = os.environ.get("PHOTOSYNC_STORAGE") or get_setting(db, "STORAGE_ROOT")
 
     # 1. Fetch only the photos that belong to THIS user
     photos_to_delete = db.query(Photo).filter(
@@ -188,7 +188,7 @@ def get_photo_file(
             raise HTTPException(status_code=404, detail="Photo not found or access denied")
 
     # --- PATH CALCULATION ---
-    storage_root = get_setting(db, "STORAGE_ROOT")
+    storage_root = os.environ.get("PHOTOSYNC_STORAGE") or get_setting(db, "STORAGE_ROOT")
     device = db.query(Device).filter(Device.id == photo.device_id).first()
     owner = db.query(User).filter(User.id == photo.user_id).first()
 

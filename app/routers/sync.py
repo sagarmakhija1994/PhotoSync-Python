@@ -1,3 +1,4 @@
+# app/routers/sync.py
 import os
 import shutil
 from datetime import datetime
@@ -51,10 +52,12 @@ def get_current_context(
 # --- SINGLE SOURCE OF TRUTH FOR PATHS ---
 def build_file_path(db: Session, username: str, device_name: str, raw_path: str) -> str:
     """Guarantees the exact same file path is generated for Upload, Check, and Serve."""
-    setting = db.query(SystemSetting).filter(SystemSetting.key == "storage_path").first()
+    base_storage_path = os.environ.get("PHOTOSYNC_STORAGE")
+    if not base_storage_path:
+        setting = db.query(SystemSetting).filter(SystemSetting.key == "storage_path").first()
 
-    # Base path from DB or fallback
-    base_storage_path = setting.value.strip() if setting and setting.value else r"C:\photosync-data"
+        # Base path from DB or fallback
+        base_storage_path = setting.value.strip() if setting and setting.value else r"C:\photosync-data"
 
     clean_user = username.strip()
     clean_device = device_name.strip()

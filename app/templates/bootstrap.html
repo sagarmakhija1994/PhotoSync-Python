@@ -1,35 +1,34 @@
 {% extends "base.html" %}
+{% block title %}PhotoSync - Server Setup{% endblock %}
 
-{% block title %}Initial Admin Setup{% endblock %}
+{% block nav %}{% endblock %}
 
 {% block content %}
-<h2>Initial Admin Setup</h2>
+<div class="card card-sm">
+    <div style="text-align: center; margin-bottom: 24px;">
+        <h2>Welcome to PhotoSync</h2>
+        <p style="margin-top: 4px;">Let's configure your admin account and storage to get your server running.</p>
+    </div>
 
-<p>This is a one-time setup. The first user will become the administrator.</p>
+    <form method="post">
+        <label>Admin Username</label>
+        <input type="text" name="username" placeholder="e.g. admin" required>
 
-<form method="post">
-    <label>Username</label><br>
-    <input name="username" required><br><br>
+        <label>Admin Email</label>
+        <input type="email" name="email" placeholder="admin@local.host" required>
 
-    <label>Email</label><br>
-    <input type="email" name="email" required><br><br>
+        <label>Secure Password</label>
+        <input type="password" name="password" required>
 
-    <label>Password</label><br>
-    <input type="password" name="password" required><br><br>
+        <label>Media Storage Path (Absolute)</label>
+        <input type="text" name="storage_path" placeholder="e.g. D:\PhotoStorage" required>
+        <small>This folder must already exist on your server hard drive.</small>
 
-    <label>Storage Path (absolute)</label><br>
-    <input name="storage_path" placeholder="E:/photosync-data" required style="width:400px"><br><br>
+        <button type="submit" class="btn btn-primary btn-full">Complete Setup & Boot Server</button>
+    </form>
 
-    <small>
-    Path must already exist and be writable.<br>
-    Example: <code>D:/PhotoStorage</code> or <code>/mnt/photos</code>
-    </small><br><br>
-
-
-    <button type="submit">Create Admin</button>
-</form>
-
-{% if error %}
-<p style="color:red">{{ error }}</p>
-{% endif %}
+    {% if error %}
+    <div class="alert-error">{{ error }}</div>
+    {% endif %}
+</div>
 {% endblock %}

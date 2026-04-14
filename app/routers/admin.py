@@ -16,6 +16,8 @@ from fastapi import Form
 from pydantic import BaseModel
 
 import os
+import sys
+import json
 from app.system_settings import set_setting
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -149,6 +151,18 @@ def bootstrap_page(request: Request, db: Session = Depends(get_db)):
     )
 
 
+def get_config_path():
+    """Finds the config.json file dynamically based on .exe or script location"""
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(sys.executable), "config.json")
+
+    # admin_auth.py is in app/, so we go up one level to the root
+    routers_dir = os.path.dirname(os.path.abspath(__file__))
+    app_dir = os.path.dirname(routers_dir)
+    root_dir = os.path.dirname(app_dir)
+    return os.path.join(root_dir, "config.json")
+
+
 @router.post("/bootstrap")
 def bootstrap_create_admin(
     request: Request,
@@ -163,17 +177,17 @@ def bootstrap_create_admin(
 
     storage_path = os.path.abspath(storage_path)
 
-    # Validate path exists
+    # 1. Validate path exists (Your existing logic)
     if not os.path.isdir(storage_path):
         return templates.TemplateResponse(
             "bootstrap.html",
             {
                 "request": request,
-                "error": "Storage path does not exist",
+                "error": "Storage path does not exist on the server.",
             },
         )
 
-    # Validate writable
+    # 2. Validate writable (Your existing logic)
     try:
         test_file = os.path.join(storage_path, ".write_test")
         with open(test_file, "w") as f:
@@ -198,10 +212,23 @@ def bootstrap_create_admin(
 
     db.add(admin)
 
-    # Save storage root
+    # 3. Save storage root to Database (Legacy/Fallback)
     set_setting(db, "STORAGE_ROOT", storage_path)
-
     db.commit()
+
+    # 4. THE FIX: Save storage path to config.json
+    config_path = get_config_path()
+    config = {}
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
+    config["storage_path"] = storage_path
+    with open(config_path, "w") as f:
+        json.dump(config, f)
+
+    # 5. THE FIX: Inject it into environment variables instantly for FastAPI
+    os.environ["PHOTOSYNC_STORAGE"] = storage_path
 
     request.session["admin_user_id"] = admin.id
     return RedirectResponse("/admin/users", status_code=303)

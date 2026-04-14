@@ -1,68 +1,64 @@
 {% extends "base.html" %}
-
-{% block title %}Users | PhotoSync Admin{% endblock %}
+{% block title %}Users Dashboard | PhotoSync{% endblock %}
 
 {% block content %}
-<h2>Users</h2>
-<p>
-    <a href="/admin/users/create" style="text-decoration: none; padding: 6px 10px; background: #2196F3; color: white; border-radius: 4px;">➕ Create User</a>
-</p>
-<table>
-    <tr>
-        <th>ID</th>
-        <th>Username</th>
-        <th>Email</th>
-        <th>Status</th>
-        <th>Created</th>
-        <th>Actions</th>
-    </tr>
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2>Registered Users</h2>
+        <a href="/admin/users/create" class="btn btn-primary">➕ Create User</a>
+    </div>
 
-    {% for user in users %}
-    <tr>
-        <td>{{ user.id }}</td>
-        <td>{{ user.username }}</td>
-        <td>{{ user.email }}</td>
-        <td class="status-{{ user.status }}">{{ user.status }}</td>
-        <td>{{ user.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
-        <td>
-            {% if user.status == "PENDING" %}
-                <form method="post" action="/admin/users/{{ user.id }}/approve" style="display:inline">
-                    <button style="background-color: #4CAF50; color: white; border: none; border-radius: 3px;">Approve</button>
-                </form>
-                <form method="post" action="/admin/users/{{ user.id }}/block" style="display:inline">
-                    <button style="background-color: #f44336; color: white; border: none; border-radius: 3px;">Block</button>
-                </form>
-            {% elif user.status == "ACTIVE" %}
-                {% if not user.is_admin or users|selectattr("is_admin")|selectattr("status","equalto","ACTIVE")|list|length > 1 %}
-                    <form method="post" action="/admin/users/{{ user.id }}/block" style="display:inline">
-                        <button style="background-color: #f44336; color: white; border: none; border-radius: 3px;">Block</button>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+
+        {% for user in users %}
+        <tr>
+            <td>{{ user.id }}</td>
+            <td><strong>{{ user.username }}</strong></td>
+            <td>{{ user.email }}</td>
+            <td><span class="badge status-{{ user.status }}">{{ user.status }}</span></td>
+            <td>{{ user.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+            <td style="display: flex; gap: 8px;">
+                {% if user.status == "PENDING" %}
+                    <form method="post" action="/admin/users/{{ user.id }}/approve" style="margin: 0;">
+                        <button class="btn btn-success">Approve</button>
                     </form>
+                    <form method="post" action="/admin/users/{{ user.id }}/block" style="margin: 0;">
+                        <button class="btn btn-danger">Block</button>
+                    </form>
+                {% elif user.status == "ACTIVE" %}
+                    {% if not user.is_admin or users|selectattr("is_admin")|selectattr("status","equalto","ACTIVE")|list|length > 1 %}
+                        <form method="post" action="/admin/users/{{ user.id }}/block" style="margin: 0;">
+                            <button class="btn btn-danger">Block</button>
+                        </form>
+                    {% else %}
+                        <span style="color: #6b7280; font-size: 14px; padding: 8px 0; font-weight: bold;">★ Primary Admin</span>
+                    {% endif %}
                 {% else %}
-                    <span>Primary Admin</span>
+                    <span style="color: #9ca3af; padding: 8px 0;">—</span>
                 {% endif %}
-            {% else %}
-                —
-            {% endif %}
 
-            {% if user.status != "BLOCKED" %}
-                <button onclick="resetUserPassword({{ user.id }}, '{{ user.username }}')" style="background-color: #ff9800; color: white; border: none; border-radius: 3px; margin-left: 5px;">
-                    Reset Password
-                </button>
-                <button onclick="forceLogout({{ user.id }}, '{{ user.username }}')" style="background-color: #9c27b0; color: white; border: none; border-radius: 3px; margin-left: 5px;">
-                    Logoff All
-                </button>
-            {% endif %}
-        </td>
-    </tr>
-    {% endfor %}
-</table>
+                {% if user.status != "BLOCKED" %}
+                    <button class="btn btn-warning" onclick="resetUserPassword({{ user.id }}, '{{ user.username }}')">Reset Pass</button>
+                    <button class="btn btn-purple" onclick="forceLogout({{ user.id }}, '{{ user.username }}')">Logoff All</button>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
 
 <script>
 async function resetUserPassword(userId, username) {
-    // This prompt() function provides the manual input box!
     const newPassword = prompt(`Enter a new password for ${username}:`);
-
-    if (!newPassword) return; // Cancels if the admin clicks "Cancel" or leaves it blank
+    if (!newPassword) return;
 
     try {
         const response = await fetch(`/admin/users/${userId}/reset-password`, {
@@ -70,37 +66,20 @@ async function resetUserPassword(userId, username) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ new_password: newPassword })
         });
-
         const data = await response.json();
-
-        if (response.ok) {
-            alert(`Success: ${data.message}\nThe password has been updated.`);
-        } else {
-            alert(`Error: ${data.detail || 'Could not reset password'}`);
-        }
-    } catch (error) {
-        alert("Network error occurred.");
-    }
+        if (response.ok) { alert(`Success: ${data.message}`); }
+        else { alert(`Error: ${data.detail || 'Could not reset password'}`); }
+    } catch (error) { alert("Network error occurred."); }
 }
 
 async function forceLogout(userId, username) {
     if (!confirm(`Are you sure you want to log ${username} out of all devices instantly?`)) return;
-
     try {
-        const response = await fetch(`/admin/users/${userId}/force-logout`, {
-            method: 'POST'
-        });
-
+        const response = await fetch(`/admin/users/${userId}/force-logout`, { method: 'POST' });
         const data = await response.json();
-
-        if (response.ok) {
-            alert(`Success: ${data.message}`);
-        } else {
-            alert(`Error: ${data.detail || 'Could not log user out.'}`);
-        }
-    } catch (error) {
-        alert("Network error occurred.");
-    }
+        if (response.ok) { alert(`Success: ${data.message}`); }
+        else { alert(`Error: ${data.detail || 'Could not log user out.'}`); }
+    } catch (error) { alert("Network error occurred."); }
 }
 </script>
 {% endblock %}

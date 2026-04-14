@@ -3,71 +3,78 @@ import os
 import json
 import threading
 import webbrowser
+import time
 import tkinter as tk
 from tkinter import simpledialog, messagebox
 
 # ---- 1. CHECK BOOT STATE FIRST ----
-# We need to know immediately if we are in the invisible Session 0
 IS_BACKGROUND = "--background" in sys.argv
 
-# ---- 2. CREATE FOLDERS BEFORE ANYTHING ELSE ----
-os.makedirs("data", exist_ok=True)
-app_data_path = os.path.join(os.getenv('APPDATA'), 'PhotoSync')
-os.makedirs(app_data_path, exist_ok=True)
-os.makedirs(os.path.join(app_data_path, "data"), exist_ok=True)
+# ---- 2. LOCATE THE INSTALLATION FOLDER ----
+if getattr(sys, 'frozen', False):
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ---- 3. REDIRECT LOGS ----
-log_file_path = os.path.join(app_data_path, "photosync_server.log")
+os.makedirs(os.path.join(APP_DIR, "data"), exist_ok=True)
+
+# ---- 3. REDIRECT LOGS LOCALLY ----
+log_file_path = os.path.join(APP_DIR, "photosync_server.log")
 log_file = open(log_file_path, "w", encoding="utf-8")
 sys.stdout = log_file
 sys.stderr = log_file
 
-# ---- 4. NOW WE IMPORT FASTAPI ----
-import uvicorn
-import pystray
-from PIL import Image, ImageDraw
-from app.main import app
-
-# ---- 5. SAFE CONFIGURATION LOGIC ----
-config_path = os.path.join(app_data_path, "config.json")
+# ---- 4. SAFE CONFIGURATION LOGIC ----
+config_path = os.path.join(APP_DIR, "config.json")
 
 
-def prompt_for_port(initial_port=8000, title="PhotoSync Setup"):
+def prompt_for_setup(initial_port=8000):
     root = tk.Tk()
     root.withdraw()
     root.attributes('-topmost', True)
 
+    # Issue 1 Fixed: ONLY ask for the Port here. No folder selection.
     user_port = simpledialog.askinteger(
-        title,
-        "Enter a port number for your PhotoSync server (e.g., 8000, 8080):",
+        "PhotoSync Setup",
+        "Enter a port number for your PhotoSync server (e.g., 8000):",
         initialvalue=initial_port,
         minvalue=1024,
         maxvalue=65535
     )
     root.destroy()
-    return user_port if user_port else initial_port
+    return user_port
 
 
 def load_or_init_config():
     if os.path.exists(config_path):
         with open(config_path, "r") as f:
             config = json.load(f)
-            return config.get("port", 8000)
+            return config.get("port", 8000), config.get("storage_path", "")
     else:
-        # CRITICAL SAFEGUARD:
-        # If config doesn't exist and we are in Session 0, DO NOT open the popup.
         if IS_BACKGROUND:
-            return None
+            return None, None
 
-            # Otherwise, the user clicked it normally. Ask them for the port!
-        new_port = prompt_for_port()
+        new_port = prompt_for_setup()
+        if not new_port:
+            sys.exit(0)
+
+        # Save config with an empty storage path. User configures it in Admin UI.
         with open(config_path, "w") as f:
-            json.dump({"port": new_port}, f)
-        return new_port
+            json.dump({"port": new_port, "storage_path": ""}, f)
+        return new_port, ""
 
 
-# Load the port (Will be None if background boot + no config)
-CURRENT_PORT = load_or_init_config()
+CURRENT_PORT, STORAGE_PATH = load_or_init_config()
+
+# ---- 5. SET ENV VAR SAFELY ----
+if STORAGE_PATH and os.path.exists(STORAGE_PATH):
+    os.environ["PHOTOSYNC_STORAGE"] = STORAGE_PATH
+
+# ---- 6. IMPORT FASTAPI ----
+import uvicorn
+import pystray
+from PIL import Image, ImageDraw
+from app.main import app
 
 server = None
 
@@ -92,17 +99,20 @@ def on_open_dashboard(icon, item):
 
 def on_change_port(icon, item):
     global CURRENT_PORT
-    new_port = prompt_for_port(initial_port=CURRENT_PORT, title="Change PhotoSync Port")
+    new_port = prompt_for_setup(initial_port=CURRENT_PORT)
 
-    if new_port != CURRENT_PORT:
+    if new_port and new_port != CURRENT_PORT:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        config["port"] = new_port
         with open(config_path, "w") as f:
-            json.dump({"port": new_port}, f)
+            json.dump(config, f)
 
         root = tk.Tk()
         root.withdraw()
         root.attributes('-topmost', True)
         messagebox.showinfo("Restart Required",
-                            f"Port saved as {new_port}!\n\nPlease right-click the tray icon, click 'Exit', and restart PhotoSync to apply changes.")
+                            f"Port saved as {new_port}!\n\nPlease right-click the tray icon, click 'Exit', and restart PhotoSync.")
         root.destroy()
 
 
@@ -113,21 +123,33 @@ def on_exit(icon, item):
     icon.stop()
 
 
-# ---- 6. EXECUTION LOGIC ----
+# ---- 7. EXECUTION LOGIC & SAFEGUARD UI ----
 if __name__ == "__main__":
     if IS_BACKGROUND:
         if CURRENT_PORT is None:
-            # We are on the lock screen, but the user hasn't set a port yet.
-            # Exit silently. The app will run normally when they launch from Start Menu.
             sys.exit(0)
         else:
-            # We have a port, and we are in the background. Run server without UI!
             start_server()
     else:
-        # User launched app manually. Give them the full tray UI.
         if CURRENT_PORT is not None:
+            # 1. Start the server FIRST so the web portal is alive
             server_thread = threading.Thread(target=start_server, daemon=True)
             server_thread.start()
+
+            # Wait 1.5 seconds for FastAPI to boot before opening browsers
+            time.sleep(1.5)
+
+            # Issue 2 Fixed: Show error, then redirect to Admin Portal on close
+            if STORAGE_PATH and not os.path.exists(STORAGE_PATH):
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes('-topmost', True)
+                messagebox.showerror("Storage Drive Missing",
+                                     f"PhotoSync cannot find your media drive at: {STORAGE_PATH}\n\nPlease click OK to open the Admin Portal and update your settings.")
+                root.destroy()
+
+                # Instantly launch browser to the settings page!
+                webbrowser.open(f"http://127.0.0.1:{CURRENT_PORT}/admin/settings")
 
             menu = pystray.Menu(
                 pystray.MenuItem("Open Dashboard", on_open_dashboard, default=True),
@@ -138,5 +160,4 @@ if __name__ == "__main__":
             icon = pystray.Icon("PhotoSync", create_image(), "PhotoSync Server", menu)
             icon.run()
         else:
-            # Failsafe in case they hit cancel on the port popup
             sys.exit(0)

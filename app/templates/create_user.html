@@ -1,34 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Create User{% endblock %}
+{% block title %}Create User | PhotoSync{% endblock %}
 
 {% block content %}
-<h2>Create User</h2>
+<div class="card card-sm">
+    <h2 style="margin-bottom: 24px;">Create New User</h2>
 
-<form method="post">
-    <label>Username</label><br>
-    <input name="username" required><br><br>
+    <form method="post">
+        <label>Username</label>
+        <input type="text" name="username" required>
 
-    <label>Email</label><br>
-    <input type="email" name="email" required><br><br>
+        <label>Email</label>
+        <input type="email" name="email" required>
 
-    <label>Password</label><br>
-    <input type="password" name="password" required><br><br>
+        <label>Password</label>
+        <input type="password" name="password" required>
 
-    <label>
-        <input type="checkbox" name="is_admin">
-        Admin user
-    </label><br><br>
+        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+            <input type="checkbox" name="is_admin" style="width: auto; margin: 0;">
+            Admin User Privileges
+        </label>
 
-    <label>Status</label><br>
-    <select name="status">
-        <option value="ACTIVE">ACTIVE</option>
-        <option value="PENDING">PENDING</option>
-    </select><br><br>
+        <label>Account Status</label>
+        <select name="status">
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="PENDING">PENDING</option>
+        </select>
 
-    <button type="submit">Create</button>
-</form>
+        <button type="submit" class="btn btn-primary btn-full">Create User</button>
+    </form>
 
-{% if error %}
-<p style="color:red">{{ error }}</p>
-{% endif %}
+    {% if error %}
+    <div class="alert-error">{{ error }}</div>
+    {% endif %}
+</div>
 {% endblock %}

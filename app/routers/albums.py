@@ -121,7 +121,7 @@ def import_shared_photo(request: ImportPhotoRequest, user: User = Depends(get_cu
     if not original_photo:
         raise HTTPException(status_code=404, detail="Photo not found.")
 
-    storage_root = get_setting(db, "STORAGE_ROOT")
+    storage_root = os.environ.get("PHOTOSYNC_STORAGE") or get_setting(db, "STORAGE_ROOT")
     if not storage_root:
         raise HTTPException(status_code=500, detail="Storage root not configured.")
 
@@ -298,7 +298,7 @@ def delete_album(
 
     # If the user wants to permanently delete the physical files inside this album
     if delete_files:
-        storage_root = get_setting(db, "STORAGE_ROOT")
+        storage_root = os.environ.get("PHOTOSYNC_STORAGE") or get_setting(db, "STORAGE_ROOT")
         album_photos = db.query(AlbumPhoto).filter(AlbumPhoto.album_id == album_id).all()
 
         for ap in album_photos:
