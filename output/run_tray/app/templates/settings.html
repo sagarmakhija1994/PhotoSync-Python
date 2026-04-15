@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Server Settings | PhotoSync{% endblock %}
+
+{% block content %}
+<div id="error-banner" class="alert-banner">
+    ⚠️ CRITICAL: Media Storage Drive is missing or not configured.
+</div>
+
+<div class="card card-sm">
+    <h2>Server Settings</h2>
+    <p>Enter the absolute path on your Windows server where photos should be saved.</p>
+    
+    <label style="margin-top: 24px;">Media Storage Path</label>
+    <input type="text" id="storagePath" placeholder="e.g. D:\PhotoSyncMedia">
+    
+    <button class="btn btn-primary btn-full" onclick="saveSettings()">Save Path Configuration</button>
+
+    <div id="message" style="color: #10b981; font-weight: bold; margin-top: 16px; text-align: center;"></div>
+    <div id="error-msg" class="alert-error" style="display: none;"></div>
+</div>
+
+<script>
+    window.onload = function() {
+        fetch('/api/settings')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('storagePath').value = data.storage_path || "";
+                if (data.is_missing) {
+                    document.getElementById('error-banner').style.display = 'block';
+                }
+            })
+            .catch(err => console.error("Error loading settings:", err));
+    };
+
+    function saveSettings() {
+        const path = document.getElementById('storagePath').value;
+        const messageEl = document.getElementById('message');
+        const errorEl = document.getElementById('error-msg');
+        const bannerEl = document.getElementById('error-banner');
+
+        messageEl.innerText = "";
+        errorEl.style.display = "none";
+
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storage_path: path })
+        })
+        .then(async response => {
+            const data = await response.json();
+            if (!response.ok) {
+                errorEl.innerText = data.detail || "Error saving path.";
+                errorEl.style.display = "block";
+            } else {
+                messageEl.innerText = "Settings saved successfully!";
+                bannerEl.style.display = 'none';
+            }
+        })
+        .catch(err => {
+            errorEl.innerText = "Failed to connect to the server.";
+            errorEl.style.display = "block";
+        });
+    }
+</script>
+{% endblock %}

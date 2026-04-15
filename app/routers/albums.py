@@ -309,12 +309,10 @@ def delete_album(
                 original_path = safe_join(storage_root, "users", user.username, device.device_name, photo.relative_path)
                 dir_name = os.path.dirname(original_path)
                 thumb_path_1 = safe_join(dir_name, ".thumbnails", os.path.basename(original_path))
-                thumb_path_2 = safe_join(dir_name, ".thumbnails", os.path.basename(original_path))
 
                 try:
                     if os.path.exists(original_path): os.remove(original_path)
                     if os.path.exists(thumb_path_1): os.remove(thumb_path_1)
-                    if os.path.exists(thumb_path_2): os.remove(thumb_path_2)
                 except Exception as e:
                     print(f"Failed to delete file {photo.id}: {e}")
 

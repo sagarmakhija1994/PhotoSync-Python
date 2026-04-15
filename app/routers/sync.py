@@ -1,6 +1,8 @@
 # app/routers/sync.py
 import os
+import sys
 import shutil
+import subprocess
 from datetime import datetime
 from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
@@ -180,36 +182,6 @@ def list_photos(
     return {"photos": result}
 
 
-# --- 4. SECURE FILE / THUMBNAIL SERVER ---
-@router.get("/file/{photo_id}")
-def get_photo_file(
-        photo_id: int,
-        thumbnail: bool = False,
-        context: dict = Depends(get_current_context),
-        db: Session = Depends(get_db)
-):
-    user = context["user"]
-
-    photo = db.query(Photo).filter(Photo.id == photo_id, Photo.user_id == user.id).first()
-    if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
-
-    device = db.query(Device).filter(Device.id == photo.device_id).first()
-
-    # USE THE HELPER TO GUARANTEE MATCH
-    original_path = build_file_path(db, user.username, device.device_name, photo.relative_path)
-
-    if thumbnail and photo.media_type == "photo":
-        dir_name = os.path.dirname(original_path)
-        filename = os.path.basename(original_path)
-        thumb_path = os.path.join(dir_name, ".thumbnails", filename)
-        if os.path.exists(thumb_path):
-            return FileResponse(thumb_path)
-
-    if not os.path.exists(original_path):
-        raise HTTPException(status_code=404, detail="Physical file is missing from server")
-
-    return FileResponse(original_path)
 
 
 # --- 5. THE UPLOAD ENDPOINT ---
@@ -263,6 +235,13 @@ def upload_file(
             except Exception as e:
                 print(f"❌ THUMBNAIL FAILED for {file.filename}: {str(e)}")
 
+        elif clean_media == "video":
+            print("DEBUG: Attempting to generate video GIF thumbnail...")
+            try:
+                generate_video_gif(file_path)
+            except Exception as e:
+                print(f"❌ Video GIF FAILED: {str(e)}")
+
         db.commit()
         print(f"✅ UPLOAD SUCCESS: Saved at {file_path}")
         return {"status": "success"}
@@ -292,3 +271,54 @@ def generate_thumbnail(original_path: str):
         img.save(thumb_path, "JPEG", quality=80)
 
     return thumb_path
+
+
+def get_ffmpeg_path():
+    """Smart path resolver that finds our bundled ffmpeg.exe"""
+    # 1. If running as a compiled .exe (PyInstaller)
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # 2. If running as a Python script, go up 2 levels (sync.py -> routers/ -> app/ -> ROOT)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        app_dir = os.path.dirname(current_dir)
+        base_dir = os.path.dirname(app_dir)
+
+    bundled_ffmpeg = os.path.join(base_dir, "bin", "ffmpeg.exe")
+
+    # Return our bundled version if it exists, otherwise hope the system has it as a fallback
+    if os.path.exists(bundled_ffmpeg):
+        return bundled_ffmpeg
+    return "ffmpeg"
+
+
+def generate_video_gif(original_path: str):
+    """Uses FFmpeg to generate a highly compressed 4-second GIF from a video."""
+    dir_name = os.path.dirname(original_path)
+    thumb_dir = os.path.join(dir_name, ".thumbnails")
+    os.makedirs(thumb_dir, exist_ok=True)
+
+    base_name = os.path.basename(original_path)
+    gif_name = f"{base_name}.gif"
+    thumb_path = os.path.join(thumb_dir, gif_name)
+
+    ffmpeg_exe = get_ffmpeg_path()
+
+    # THE MAGIC DIET:
+    # 4 seconds, 5 FPS, 300px wide, max 128 colors, highly compressed dither
+    command = [
+        ffmpeg_exe, "-y",
+        "-ss", "00:00:00",
+        "-t", "4",
+        "-i", original_path,
+        "-vf", "fps=5,scale=300:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5",
+        "-loop", "0",
+        thumb_path
+    ]
+
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return thumb_path
+    except subprocess.CalledProcessError as e:
+        print(f"❌ FFmpeg failed to generate GIF for {base_name}: {e}")
+        return None

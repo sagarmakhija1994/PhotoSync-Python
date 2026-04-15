@@ -52,7 +52,14 @@ def load_or_init_config():
             return config.get("port", 8000), config.get("storage_path", "")
     else:
         if IS_BACKGROUND:
-            return None, None
+            # If running as a hidden Windows background process, write to file
+            log_file_path = os.path.join(APP_DIR, "photosync_server.log")
+            log_file = open(log_file_path, "w", encoding="utf-8", buffering=1)
+            sys.stdout = log_file
+            sys.stderr = log_file
+        else:
+            # If running manually in terminal/PyCharm, DO NOT redirect. Print to screen!
+            print("🖥️ Running in Interactive Mode: Logs will print to this console.")
 
         new_port = prompt_for_setup()
         if not new_port:
@@ -88,7 +95,7 @@ def create_image():
 
 def start_server():
     global server
-    config = uvicorn.Config(app, host="0.0.0.0", port=CURRENT_PORT, log_level="warning")
+    config = uvicorn.Config(app, host="0.0.0.0", port=CURRENT_PORT, log_level="info")
     server = uvicorn.Server(config)
     server.run()
 
