@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, B
 from app.database import SessionLocal # Add this if not imported!
 import subprocess
 import sys
+from app.routers.sync import generate_video_gif, generate_thumbnail
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -198,7 +199,7 @@ def get_photo_file(
 
     original_path = safe_join(storage_root, "users", owner.username, device.device_name, photo.relative_path)
 
-    # --- THUMBNAIL HANDLING WITH GIF SUPPORT ---
+    # --- THUMBNAIL HANDLING WITH GIF SUPPORT & JIT GENERATION ---
     if thumbnail:
         dir_name = os.path.dirname(original_path)
         filename = os.path.basename(original_path)
@@ -210,13 +211,33 @@ def get_photo_file(
             thumb_path = safe_join(dir_name, ".thumbnails", filename)
             mime = "image/jpeg"
 
-        if os.path.exists(thumb_path):
-            return FileResponse(thumb_path, media_type=mime)
+        # 💥 THE NEW FIX: ON-THE-FLY GENERATION 💥
+        if not os.path.exists(thumb_path):
+            print(f"⚙️ JIT GENERATION: Creating missing thumbnail for {filename}...", flush=True)
+            try:
+                # Fire up FFmpeg or Pillow to make it right now!
+                if photo.media_type == "video":
+                    generate_video_gif(original_path)
+                else:
+                    generate_thumbnail(original_path)
+            except Exception as e:
+                print(f"❌ JIT FAILED for {filename}: {e}", flush=True)
+                raise HTTPException(status_code=500, detail="Thumbnail generation crashed")
 
+            # If it STILL doesn't exist after trying, safely throw a 404
+            if not os.path.exists(thumb_path):
+                raise HTTPException(status_code=404, detail="Thumbnail could not be generated")
+
+        # If we made it here, the thumbnail exists (either it was already there, or we just made it!)
+        cache_headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+        return FileResponse(thumb_path, media_type=mime, headers=cache_headers)
+
+    # --- FULL SIZE FILE (Only reached if thumbnail=False) ---
     if not os.path.exists(original_path):
         raise HTTPException(status_code=404, detail="Physical file missing from server")
 
-    return FileResponse(original_path)
+    cache_headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+    return FileResponse(original_path, headers=cache_headers)
 
 
 # =====================================================================
