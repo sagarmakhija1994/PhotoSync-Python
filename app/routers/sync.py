@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from jose import jwt
 from typing import List
 from PIL import Image
+import rawpy
+import pillow_heif
 from fastapi.responses import FileResponse
 
 # Import your database and models
@@ -250,27 +252,54 @@ def upload_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# 💥 THE HEIC FIX: This teaches Pillow how to open Apple HEIC files seamlessly!
+pillow_heif.register_heif_opener()
+
 # --- UTILITIES ---
-def generate_thumbnail(original_path: str):
-    # 1. Create a hidden .thumbnails folder in the same directory
+def generate_thumbnail(original_path):
     dir_name = os.path.dirname(original_path)
-    thumb_dir = os.path.join(dir_name, ".thumbnails")
-    os.makedirs(thumb_dir, exist_ok=True)
+    filename = os.path.basename(original_path)
+    thumb_path = os.path.join(dir_name, ".thumbnails", filename)
 
-    # 2. Build the thumbnail path
-    base_name = os.path.basename(original_path)
-    thumb_path = os.path.join(thumb_dir, base_name)
+    os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
 
-    # 3. Open and resize
-    with Image.open(original_path) as img:
-        # Maintain aspect ratio
-        img.thumbnail((400, 400))
-        # Convert to RGB (in case of PNG with transparency)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        img.save(thumb_path, "JPEG", quality=80)
+    ext = filename.lower().split('.')[-1]
+    raw_extensions = ['dng', 'cr2', 'nef', 'arw', 'orf', 'rw2', 'raf']
 
-    return thumb_path
+    try:
+        if ext in raw_extensions:
+            try:
+                # Fast path (Works for DNG, CR2, older ARW)
+                with rawpy.imread(original_path) as raw:
+                    rgb = raw.postprocess(half_size=True, use_camera_wb=True)
+                    img = Image.fromarray(rgb)
+                    img.thumbnail((400, 400))
+                    img.save(thumb_path, "JPEG", quality=80)
+            except Exception as e:
+                print(f"⚠️ Fast RAW decode failed for {filename}, trying deep decode: {e}")
+                # 💥 THE SONY FIX: Newer ARW files crash on "half_size".
+                # This fallback does a full, deep decode to guarantee it works.
+                with rawpy.imread(original_path) as raw:
+                    rgb = raw.postprocess()  # Removed half_size
+                    img = Image.fromarray(rgb)
+                    img.thumbnail((400, 400))
+                    img.save(thumb_path, "JPEG", quality=80)
+
+        else:
+            # --- STANDARD IMAGES (JPG, PNG, WEBP, and now HEIC!) ---
+            with Image.open(original_path) as img:
+                # Convert to RGB to prevent crashes from transparency or HDR profiles
+                if img.mode in ("RGBA", "P", "CMYK"):
+                    img = img.convert("RGB")
+
+                img.thumbnail((400, 400))
+                # Even if it's an Apple .HEIC file, we save the thumbnail as a fast, universal .JPEG!
+                img.save(thumb_path, "JPEG", quality=80)
+
+    except Exception as e:
+        print(f"❌ Critical failure generating thumbnail for {filename}: {e}", flush=True)
+        # Safely throw the error so the router sends a 404 instead of a broken file
+        raise e
 
 
 def get_ffmpeg_path():

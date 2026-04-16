@@ -1,3 +1,5 @@
+pillow-heif
+rawpy
 pystray
 pillow
 pydantic
