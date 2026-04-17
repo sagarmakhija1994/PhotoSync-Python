@@ -1,3 +1,4 @@
+# run_tray.py
 import sys
 import os
 import json
@@ -19,10 +20,10 @@ else:
 os.makedirs(os.path.join(APP_DIR, "data"), exist_ok=True)
 
 # ---- 3. REDIRECT LOGS LOCALLY ----
-log_file_path = os.path.join(APP_DIR, "photosync_server.log")
-log_file = open(log_file_path, "w", encoding="utf-8")
-sys.stdout = log_file
-sys.stderr = log_file
+# log_file_path = os.path.join(APP_DIR, "photosync_server.log")
+# log_file = open(log_file_path, "w", encoding="utf-8")
+# sys.stdout = log_file
+# sys.stderr = log_file
 
 # ---- 4. SAFE CONFIGURATION LOGIC ----
 config_path = os.path.join(APP_DIR, "config.json")
@@ -103,24 +104,58 @@ def start_server():
 def on_open_dashboard(icon, item):
     webbrowser.open(f"http://127.0.0.1:{CURRENT_PORT}/admin")
 
+def on_open_web_portal(icon, item):
+    webbrowser.open(f"http://127.0.0.1:{CURRENT_PORT}/")
+
 
 def on_change_port(icon, item):
-    global CURRENT_PORT
-    new_port = prompt_for_setup(initial_port=CURRENT_PORT)
+    def _show_port_dialog():
+        global CURRENT_PORT
+        new_port = prompt_for_setup(initial_port=CURRENT_PORT)
 
-    if new_port and new_port != CURRENT_PORT:
-        with open(config_path, "r") as f:
-            config = json.load(f)
-        config["port"] = new_port
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        if new_port and new_port != CURRENT_PORT:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            config["port"] = new_port
+            with open(config_path, "w") as f:
+                json.dump(config, f)
 
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        messagebox.showinfo("Restart Required",
-                            f"Port saved as {new_port}!\n\nPlease right-click the tray icon, click 'Exit', and restart PhotoSync.")
-        root.destroy()
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+
+            # Ask the user if they want to restart automatically
+            do_restart = messagebox.askyesno(
+                "Restart Required",
+                f"Port saved as {new_port}!\n\nPhotoSync needs to restart to apply this change. Restart now?"
+            )
+            root.destroy()
+
+            if do_restart:
+                import subprocess
+                import sys
+                import os
+
+                # 1. Gracefully tell the FastAPI server to shut down
+                global server
+                if server:
+                    server.should_exit = True
+
+                # 2. Stop the system tray icon
+                icon.stop()
+
+                # 3. Spawn a brand new instance of the app
+                # (Handles both standard Python dev mode and the compiled .exe mode)
+                if getattr(sys, 'frozen', False):
+                    subprocess.Popen(sys.argv)
+                else:
+                    subprocess.Popen([sys.executable] + sys.argv)
+
+                # 4. Forcefully terminate this current instance to instantly free the port
+                os._exit(0)
+
+    # Run in a detached thread so the UI doesn't freeze
+    threading.Thread(target=_show_port_dialog, daemon=True).start()
 
 
 def on_exit(icon, item):
@@ -159,7 +194,8 @@ if __name__ == "__main__":
                 webbrowser.open(f"http://127.0.0.1:{CURRENT_PORT}/admin/settings")
 
             menu = pystray.Menu(
-                pystray.MenuItem("Open Dashboard", on_open_dashboard, default=True),
+                pystray.MenuItem("Open Web Portal", on_open_web_portal, default=True),  # <-- New!
+                pystray.MenuItem("Open Admin Dashboard", on_open_dashboard),
                 pystray.MenuItem("Change Port...", on_change_port),
                 pystray.MenuItem("Exit PhotoSync", on_exit)
             )

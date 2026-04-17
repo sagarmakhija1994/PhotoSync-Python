@@ -1,4 +1,5 @@
 # app/routers/photos.py
+import uuid
 from typing import List
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
 from app.database import SessionLocal # Add this if not imported!
@@ -21,12 +22,14 @@ from app.models import SharedAccess, AlbumPhoto # Add these two models!
 from fastapi import UploadFile, File, Form, HTTPException
 import os
 import shutil
-import uuid
 from datetime import datetime
 
 from app.models import Photo
 from app.services.storage import safe_join, compute_sha256
 from app.system_settings import get_setting
+
+import zipfile
+from PIL import Image, ExifTags
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -355,3 +358,103 @@ def trigger_gif_backfill(
         "status": "success",
         "message": "The GIF backfill process has been started in the background. Check server logs for live progress!"
     }
+
+
+@router.post("/download-batch")
+def download_photos_batch(
+        request: DeletePhotosRequest,
+        background_tasks: BackgroundTasks,  # 💥 Added Background Tasks
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    storage_root = os.environ.get("PHOTOSYNC_STORAGE") or get_setting(db, "STORAGE_ROOT")
+
+    photos_to_download = db.query(Photo).filter(
+        Photo.user_id == user.id,
+        Photo.id.in_(request.photo_ids)
+    ).all()
+
+    if not photos_to_download:
+        raise HTTPException(404, "No photos found")
+
+    # 1. Create a secure, temporary file path on your physical hard drive
+    temp_zip_filename = f"PhotoSync_Export_{uuid.uuid4().hex}.zip"
+    temp_zip_dir = safe_join(storage_root, "users", user.username, ".temp")
+    os.makedirs(temp_zip_dir, exist_ok=True)
+
+    temp_zip_path = safe_join(temp_zip_dir, temp_zip_filename)
+
+    # 2. THE SPEED FIX: Use ZIP_STORED (0 compression, 100% speed)
+    with zipfile.ZipFile(temp_zip_path, "w", zipfile.ZIP_STORED) as zip_file:
+        for photo in photos_to_download:
+            device = db.query(Device).filter(Device.id == photo.device_id).first()
+            original_path = safe_join(storage_root, "users", user.username, device.device_name, photo.relative_path)
+
+            if os.path.exists(original_path):
+                filename = os.path.basename(original_path)
+                zip_file.write(original_path, arcname=filename)
+
+    # 3. Clean up the hard drive AFTER the user finishes downloading
+    def cleanup_temp_file(path: str):
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            print(f"Cleanup failed: {e}")
+
+    background_tasks.add_task(cleanup_temp_file, temp_zip_path)
+
+    # 4. Stream directly from disk using optimized OS syscalls
+    return FileResponse(
+        path=temp_zip_path,
+        media_type="application/zip",
+        filename="PhotoSync_Export.zip"
+    )
+
+
+@router.get("/file/{photo_id}/info")
+def get_photo_info(
+        photo_id: int,
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    photo = db.query(Photo).filter(Photo.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    device = db.query(Device).filter(Device.id == photo.device_id).first()
+    storage_root = os.environ.get("PHOTOSYNC_STORAGE") or get_setting(db, "STORAGE_ROOT")
+    original_path = safe_join(storage_root, "users", user.username, device.device_name, photo.relative_path)
+
+    if not os.path.exists(original_path):
+        raise HTTPException(status_code=404, detail="File missing")
+
+    info = {
+        "filename": os.path.basename(original_path),
+        "file_size": photo.file_size,
+        "media_type": photo.media_type,
+        "created_at": photo.created_at.isoformat(),
+        "device_name": device.device_name,
+        "resolution": "Unknown",
+        "camera_make": "Unknown",
+        "camera_model": "Unknown"
+    }
+
+    # Extract EXIF only if it's an image
+    if photo.media_type == "photo":
+        try:
+            with Image.open(original_path) as img:
+                info["resolution"] = f"{img.width} x {img.height}"
+                exif = img._getexif()
+                if exif:
+                    # Map EXIF tags to readable names
+                    exif_data = {ExifTags.TAGS.get(k, k): v for k, v in exif.items()}
+                    info["camera_make"] = exif_data.get("Make", "Unknown").replace('\x00', '').strip()
+                    info["camera_model"] = exif_data.get("Model", "Unknown").replace('\x00', '').strip()
+                    # Optionally override created_at with actual EXIF DateTimeOriginal
+                    if "DateTimeOriginal" in exif_data:
+                        info["created_at"] = exif_data["DateTimeOriginal"]
+        except Exception as e:
+            print(f"EXIF extraction failed: {e}")
+
+    return info

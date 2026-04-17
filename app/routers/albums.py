@@ -1,3 +1,4 @@
+# app/routers/albums.py
 import os
 import shutil
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -223,7 +224,14 @@ def get_album_details(album_id: int, user: User = Depends(get_current_user), db:
     photos = db.query(Photo, Device).join(Device, Photo.device_id == Device.id).filter(Photo.id.in_(photo_ids)).all()
 
     photo_list = [
-        {"id": p.Photo.id, "device_name": p.Device.device_name, "file_size": p.Photo.file_size}
+        {
+            "id": p.Photo.id,
+            "device_name": p.Device.device_name,
+            "file_size": p.Photo.file_size,
+            "media_type": p.Photo.media_type,
+            "filename": os.path.basename(p.Photo.relative_path.replace("\\", "/")),
+            "created_at": p.Photo.created_at.isoformat()
+        }
         for p in photos
     ]
 

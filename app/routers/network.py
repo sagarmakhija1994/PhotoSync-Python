@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.deps import get_db, get_current_user
 from app.models import User, FollowRequest
+from sqlalchemy import or_
 
 router = APIRouter(prefix="/network", tags=["Network"])
 
@@ -96,3 +97,48 @@ def get_approved_connections(user: User = Depends(get_current_user), db: Session
     unique_connections = {u.id: u.username for u in (following + followers)}
 
     return [{"user_id": uid, "username": uname} for uid, uname in unique_connections.items()]
+
+
+# --- 5. GET SENT REQUESTS ---
+@router.get("/requests/sent")
+def get_sent_requests(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    sent = db.query(FollowRequest, User).join(User, FollowRequest.target_id == User.id) \
+        .filter(FollowRequest.follower_id == user.id, FollowRequest.status == "PENDING").all()
+    return [{"request_id": r.id, "user_id": u.id, "username": u.username} for r, u in sent]
+
+
+# --- 6. CANCEL A SENT REQUEST ---
+@router.delete("/requests/{request_id}/cancel")
+def cancel_sent_request(request_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    req = db.query(FollowRequest).filter(
+        FollowRequest.id == request_id,
+        FollowRequest.follower_id == user.id,
+        FollowRequest.status == "PENDING"
+    ).first()
+
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found.")
+
+    db.delete(req)
+    db.commit()
+    return {"status": "success", "message": "Request canceled."}
+
+
+# --- 7. REMOVE CONNECTION (UNFOLLOW) ---
+@router.delete("/connections/{target_user_id}")
+def remove_connection(target_user_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Find the ACCEPTED request where the user is either the follower OR the target
+    req = db.query(FollowRequest).filter(
+        FollowRequest.status == "ACCEPTED",
+        or_(
+            (FollowRequest.follower_id == user.id) & (FollowRequest.target_id == target_user_id),
+            (FollowRequest.target_id == user.id) & (FollowRequest.follower_id == target_user_id)
+        )
+    ).first()
+
+    if not req:
+        raise HTTPException(status_code=404, detail="Connection not found.")
+
+    db.delete(req)
+    db.commit()
+    return {"status": "success", "message": "Connection removed."}

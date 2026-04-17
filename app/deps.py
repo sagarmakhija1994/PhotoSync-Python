@@ -1,6 +1,6 @@
 # app/deps.py
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
@@ -9,7 +9,8 @@ from app.database import SessionLocal
 from app.models import User
 from app.security import SECRET_KEY, ALGORITHM
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# 1. auto_error=False tells FastAPI not to crash immediately if the header is missing
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def get_db():
@@ -21,19 +22,26 @@ def get_db():
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
+        token: str = Depends(oauth2_scheme),
+        query_token: str = Query(None, alias="token"),  # 2. Look for ?token= in the URL
+        db: Session = Depends(get_db),
 ) -> User:
+    # 3. Use the header token (Android) OR the URL token (Web Video)
+    actual_token = token or query_token
+
+    if not actual_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int | None = payload.get("sub")
+        payload = jwt.decode(actual_token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == int(user_id)).first()
     if not user or user.status != "ACTIVE":
         raise HTTPException(status_code=403, detail="User inactive or not found")
 
