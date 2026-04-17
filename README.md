@@ -1,106 +1,130 @@
-# 📸 PhotoSync – Self-Hosted Multi-User Photo Sync Server
+# 📸 PhotoSync Server
 
-PhotoSync is a **self-hosted, secure, multi-user photo synchronization system** designed to sync photos and videos from Android devices to a personal home server.
+> 🔐 A private, self-hosted alternative to Google Photos — built for full control, performance, and family-scale sharing.
 
-It acts as a private alternative to cloud platforms like Google Photos, with full control over your data.
-
-> ⚠️ This repository contains **only the backend + admin UI**.  
-> The Android client is maintained in a separate repository.
-
----
-
-## 🌟 Features
-
-### 📦 Core Backup & Storage
-- ✅ **Multi-User Support**  
-  Isolated storage environments for each user.
-
-- ✅ **Hash-Based Deduplication**  
-  Uses SHA-256 hashing to prevent duplicate uploads—even after deletion/restoration.
-
-- ✅ **Safe Filesystem Layout**  
-  Files are stored under:
-  ```
-  /users/<username>/...
-  ```
-  preserving original device folder structure.
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)]()
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)]()
+[![Python](https://img.shields.io/badge/python-3.13-blue.svg)]()
+[![License](https://img.shields.io/badge/license-Private-red.svg)]()
 
 ---
 
-### 🌐 Networking & Syncing
-- ✅ **Smart Dual-URL System**  
-  Automatically switches between:
-  - Local WiFi IP (fast transfer)
-  - Cloudflare Tunnel (remote access)
+## 🔗 Ecosystem
 
-- ✅ **Background Sync Engine**  
-  Uses Android `WorkManager` for scheduled and constraint-based syncing.
+- 📱 Android Client → https://github.com/sagarmakhija1994/PhotoSync-Android
+- 🖥 Backend Server → (this repo)
 
 ---
 
-### 👨‍👩‍👧 Private Social Network
-- ✅ **Two-Way Follow System**  
-  Send, accept, and manage connection requests.
+## ✨ What is PhotoSync?
 
-- ✅ **Album Management**
-  - Create / Rename albums
-  - Organize photos efficiently
+PhotoSync is a **self-hosted, multi-user photo & video sync platform** that gives you:
 
-- ✅ **Granular Sharing**
-  Share albums with selected users only.
-
-- ✅ **One-Tap Import**
-  Clone shared albums or photos into personal storage.
+- Full ownership of your data
+- No cloud dependency
+- Fast local transfers + remote access
+- Private family sharing network
 
 ---
 
-### 🔐 Security & Admin Dashboard
-- ✅ **Server-Rendered Admin UI** (Jinja2)
-- ✅ **Bootstrap Mode** (Initial setup lock)
-- ✅ **Manual User Approval**
-- ✅ **Admin Password Reset**
-- ✅ **JWT Session Versioning**
-- ✅ **"Logoff All" Kill Switch**
+## ⚡ Quick Start
+
+### 🪟 Windows (Recommended)
+
+👉 **Download & Install**
+- Go to **Releases**
+- Download `.exe`
+- Install & Run
+
+Then open:
+http://127.0.0.1:8000/admin
 
 ---
 
-## 🏗 Architecture Overview
+### 🧑‍💻 Manual Setup
 
-```
-       [ Android App(s) ]
-               │
-    (Smart Dual-URL Routing)
-    Local WiFi OR Cloudflare Tunnel
-               │
-      HTTPS (JWT Auth Bearer)
-               ▼
-    [ FastAPI Backend ]
-               │
-   ┌───────────┼───────────┐
-   │           │           │
-[SQLite DB] [File Storage] [Admin Web UI]
- (Metadata)  (Photos/Vids) (HTML/Jinja2)
-```
+```bash
+git clone <repo-url>
+cd photosync
 
-📁 Example Storage Path:
-```
-/your/storage/path/users/<username>/DCIM/Camera/IMG_0001.jpg
+python3.13 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ---
 
-## 🛠 Tech Stack
+## 🏗 Architecture
 
-| Component        | Technology                |
-|----------------|--------------------------|
-| Backend         | Python 3.11              |
-| API Framework   | FastAPI                  |
-| Authentication  | JWT (Session Versioning) |
-| Database        | SQLite                   |
-| ORM             | SQLAlchemy               |
-| Cryptography    | bcrypt                   |
-| Reverse Proxy   | Cloudflare Tunnel        |
-| Admin UI        | Jinja2 Templates         |
+```mermaid
+flowchart LR
+    A[📱 Android App] -->|Local WiFi / Remote URL| B[🌐 FastAPI Server]
+    B --> C[(🗄 SQLite DB)]
+    B --> D[(📁 File Storage)]
+    B --> E[🖥 Web Portal UI]
+```
+
+---
+
+## 🌟 Key Features
+
+### 📦 Storage & Sync
+- Multi-user isolated storage
+- SHA-256 deduplication
+- Original folder structure preserved
+
+---
+
+### 🌐 Smart Networking
+- Dual URL system (Local + Remote)
+- Dynamic port routing
+- Optimized media delivery
+
+---
+
+### 🖥 Web Portal (v1.5)
+- Integrated UI (no separate frontend)
+- Lightbox viewer
+- Smooth loading
+- Ultrawide support
+
+---
+
+### 🪟 Windows App
+- One-click installer
+- Bundled FFmpeg + UI
+- No setup required
+
+---
+
+### ⚙️ System Tray
+- Open Web Portal
+- Change port
+- Auto restart
+
+---
+
+### 🔐 Security
+- JWT authentication
+- Session invalidation
+- bcrypt / argon2
+
+---
+
+### 👨‍👩‍👧 Social Features
+- Follow system
+- Album sharing
+- One-tap import
+
+---
+
+### 🛠 Advanced
+- `/server-info` API
+- Git LFS
+- High-load stability
 
 ---
 
@@ -109,130 +133,35 @@ It acts as a private alternative to cloud platforms like Google Photos, with ful
 ```
 photosync/
 ├─ app/
-│  ├─ main.py
-│  ├─ database.py
-│  ├─ models.py
-│  ├─ security.py
-│  ├─ deps.py
-│  ├─ system_settings.py
-│  ├─ bootstrap.py
-│  ├─ routers/
-│  │  ├─ auth.py
-│  │  ├─ admin.py
-│  │  ├─ sync.py
-│  │  ├─ albums.py
-│  │  ├─ network.py
-│  │  └─ health.py
-│  └─ templates/
+├─ dist/
+├─ bin/
 ├─ requirements.txt
 └─ README.md
 ```
 
 ---
 
-## 🚀 Installation (Fresh Server)
+## 🔧 Admin Setup
 
-### 1️⃣ Clone Repository
-```bash
-git clone <private-repo-url>
-cd photosync
-```
-
-### 2️⃣ Create Virtual Environment
-```bash
-python3.11 -m venv venv
-source venv/bin/activate
-# Windows:
-venv\Scripts\activate
-```
-
-### 3️⃣ Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4️⃣ Run Server
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-> Use `--reload` for development mode.
+Open:
+http://127.0.0.1:8000/admin
 
 ---
 
-## ⚙️ Bootstrap Setup (CRITICAL)
-
-On first run, the system is locked until setup is complete.
-
-### Steps:
-1. Open browser:
-   ```
-   http://127.0.0.1:8000/admin
-   ```
-
-2. You will be redirected to Bootstrap Page.
-
-3. Configure:
-   - Admin credentials
-   - Storage root path (example):
-     ```
-     D:\Data\PhotoSync
-     /mnt/storage/photosync
-     ```
-
-4. Save → Server becomes active.
-
----
-
-## 🧪 Health Check
+## 📡 Health Check
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-### Response:
-```json
-{
-  "status": "ok"
-}
-```
-
----
-
-## 🎯 Release Status
-
-✅ **Release 1.0 Complete**
-
-You can now:
-- Build the Android APK
-- Connect devices
-- Run your own private cloud photo system
-
----
-
-## 📌 Notes
-
-- Designed for **self-hosting + privacy-first usage**
-- Optimized for **family-scale deployments**
-- Works best with **Cloudflare Tunnel for remote access**
-
----
-
-## 🧠 Future Scope (Optional Ideas)
-
-- Web gallery UI for users
-- AI-based image tagging
-- Video transcoding
-- Incremental sync optimizations
-
 ---
 
 ## 👨‍💻 Author
 
-**Sagar Makhija**
+Sagar Makhija
 
 ---
 
 ## 📜 License
 
-Private / Internal Use (Update as needed)
+Private / Internal Use
