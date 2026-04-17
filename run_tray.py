@@ -20,10 +20,10 @@ else:
 os.makedirs(os.path.join(APP_DIR, "data"), exist_ok=True)
 
 # ---- 3. REDIRECT LOGS LOCALLY ----
-# log_file_path = os.path.join(APP_DIR, "photosync_server.log")
-# log_file = open(log_file_path, "w", encoding="utf-8")
-# sys.stdout = log_file
-# sys.stderr = log_file
+log_file_path = os.path.join(APP_DIR, "photosync_server.log")
+log_file = open(log_file_path, "w", encoding="utf-8")
+sys.stdout = log_file
+sys.stderr = log_file
 
 # ---- 4. SAFE CONFIGURATION LOGIC ----
 config_path = os.path.join(APP_DIR, "config.json")

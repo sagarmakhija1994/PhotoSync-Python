@@ -1,4 +1,5 @@
 import os
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -57,19 +58,31 @@ def get_server_info():
         "version": "1.5.0"
     }
 
-if os.path.isdir("dist/assets"):
-    app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+# --- DYNAMIC ABSOLUTE PATHING ---
+# If running as an .exe, look next to the .exe.
+# If running in Python, look in the root project folder.
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # Because main.py is inside the /app folder, we go up one level
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+DIST_DIR = os.path.join(BASE_DIR, "dist")
+ASSETS_DIR = os.path.join(DIST_DIR, "assets")
+
+# 1. Mount the assets folder using the ABSOLUTE path
+if os.path.isdir(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
 
 @app.get("/{catchall:path}")
 def serve_react_app(catchall: str):
-    # If the browser is asking for a specific file (like logo.png or favicon.ico), serve it
-    file_path = os.path.join("dist", catchall)
+    file_path = os.path.join(DIST_DIR, catchall)
     if os.path.isfile(file_path):
         return FileResponse(file_path)
 
-    # Otherwise, give them the React index.html (React Router will handle the rest internally)
-    index_path = os.path.join("dist", "index.html")
+    index_path = os.path.join(DIST_DIR, "index.html")
     if os.path.isfile(index_path):
         return FileResponse(index_path)
 
-    return {"error": "Web UI not built. Please run 'npm run build' and move the dist folder here."}
+    return {"error": f"Web UI not found at {DIST_DIR}"}
