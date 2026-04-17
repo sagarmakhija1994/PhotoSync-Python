@@ -70,20 +70,12 @@ flowchart LR
 ---
 
 ### 🖼️ Screenshots
-## Admin Web Portal
-<img width="1919" height="1141" alt="Screenshot 2026-04-18 043727" src="https://github.com/user-attachments/assets/75c0a5c6-a37f-480f-bae8-58f6f5aed591" />
-<img width="1919" height="1139" alt="Screenshot 2026-04-18 043545" src="https://github.com/user-attachments/assets/f79b4ed4-5678-44c8-ba99-9260c73bf359" />
-<img width="1917" height="1142" alt="Screenshot 2026-04-18 043555" src="https://github.com/user-attachments/assets/6d825d36-0a36-4187-90da-a482992aecb6" />
-<img width="1919" height="1143" alt="Screenshot 2026-04-18 043605" src="https://github.com/user-attachments/assets/03d4a2c7-26b1-472a-a5be-613135ea73d0" />
 
-## User Web Portal
-<img width="1919" height="1141" alt="Screenshot 2026-04-18 042715" src="https://github.com/user-attachments/assets/697917e8-9033-4281-b421-2574f519afea" />
-<img width="1919" height="1142" alt="Screenshot 2026-04-18 042735" src="https://github.com/user-attachments/assets/7262fffe-a408-4b75-bdd8-9dbccbcaedeb" />
-<img width="1916" height="1140" alt="Screenshot 2026-04-18 042843" src="https://github.com/user-attachments/assets/0c18ee5d-4262-4b3e-8b68-9724a45b76b5" />
-<img width="1919" height="1140" alt="Screenshot 2026-04-18 043016" src="https://github.com/user-attachments/assets/1ffa034b-0c5b-4182-9305-9e869dc12564" />
-<img width="1919" height="1141" alt="Screenshot 2026-04-18 043028" src="https://github.com/user-attachments/assets/8172b693-595f-41c0-87e8-33a920df690f" />
-<img width="1919" height="1142" alt="Screenshot 2026-04-18 043105" src="https://github.com/user-attachments/assets/a1f6aa5b-fc63-423a-ad67-c0678338358a" />
+## 🛠 Admin Web Portal
+<div align="center"> <img src="https://github.com/user-attachments/assets/75c0a5c6-a37f-480f-bae8-58f6f5aed591" width="420"/> <img src="https://github.com/user-attachments/assets/f79b4ed4-5678-44c8-ba99-9260c73bf359" width="420"/> <img src="https://github.com/user-attachments/assets/6d825d36-0a36-4187-90da-a482992aecb6" width="420"/> <img src="https://github.com/user-attachments/assets/03d4a2c7-26b1-472a-a5be-613135ea73d0" width="420"/> </div>
 
+## 👤 User Web Portal
+<div align="center"> <img src="https://github.com/user-attachments/assets/697917e8-9033-4281-b421-2574f519afea" width="420"/> <img src="https://github.com/user-attachments/assets/7262fffe-a408-4b75-bdd8-9dbccbcaedeb" width="420"/> <img src="https://github.com/user-attachments/assets/0c18ee5d-4262-4b3e-8b68-9724a45b76b5" width="420"/> <img src="https://github.com/user-attachments/assets/1ffa034b-0c5b-4182-9305-9e869dc12564" width="420"/> <img src="https://github.com/user-attachments/assets/8172b693-595f-41c0-87e8-33a920df690f" width="420"/> <img src="https://github.com/user-attachments/assets/a1f6aa5b-fc63-423a-ad67-c0678338358a" width="420"/> </div>
 ---
 
 ## 🌟 Key Features
