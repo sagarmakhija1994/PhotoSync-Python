@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/apiClient';
 
 interface AuthImageProps {
@@ -11,17 +11,48 @@ interface AuthImageProps {
 export default function AuthImage({ photoId, thumbnail = false, className = '', alt = 'Photo' }: AuthImageProps) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  
+  // 💥 NEW: Track visibility and hold a reference to the DOM element
+  const [isVisible, setIsVisible] = useState(false);
+  const elementRef = useRef<any>(null);
 
+  // 💥 NEW: The Intersection Observer
   useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // If the element enters the screen (or is within 200px of it)
+        if (entries[0].isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect(); // Stop observing once it triggers to save CPU
+        }
+      },
+      {
+        rootMargin: '200px', // Load the image slightly before it scrolls into view
+      }
+    );
+
+    if (elementRef.current) {
+      observer.observe(elementRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  // Your original fetch logic, now protected by `isVisible`
+  useEffect(() => {
+    // 💥 STOP HERE if the image hasn't scrolled into view yet!
+    if (!isVisible) return;
+
     let objectUrl: string | null = null;
     let isMounted = true;
 
     const fetchImage = async () => {
       try {
-        // Fetch the image as a Blob, letting the apiClient attach the JWT
         const response = await api.get(`/photos/file/${photoId}`, {
           params: { thumbnail },
-          responseType: 'blob', // Crucial: tell Axios we expect a binary file
+          responseType: 'blob', 
         });
 
         if (isMounted) {
@@ -36,26 +67,34 @@ export default function AuthImage({ photoId, thumbnail = false, className = '', 
 
     fetchImage();
 
-    // Cleanup the Blob URL when the component unmounts to prevent memory leaks
     return () => {
       isMounted = false;
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [photoId, thumbnail]);
+  }, [photoId, thumbnail, isVisible]); // Added isVisible to dependency array
 
   if (error) {
     return (
-      <div className={`bg-gray-200 flex items-center justify-center ${className}`}>
+      <div ref={elementRef} className={`bg-gray-200 flex items-center justify-center ${className}`}>
         <span className="text-gray-400 text-sm">Unavailable</span>
       </div>
     );
   }
 
   if (!imgSrc) {
-    return <div className={`bg-gray-100 animate-pulse ${className}`} />;
+    // 💥 Attach the ref to the placeholder so the observer can watch it
+    return <div ref={elementRef} className={`bg-gray-100 animate-pulse ${className}`} />;
   }
 
-  return <img src={imgSrc} alt={alt} className={className} loading="lazy" />;
+  return (
+    <img 
+      ref={elementRef} 
+      src={imgSrc} 
+      alt={alt} 
+      className={className} 
+      loading="lazy" 
+    />
+  );
 }
